@@ -11,9 +11,11 @@ import {
   CalendarCheck,
   ShieldCheck,
   Loader2,
-  UserPlus
+  UserPlus,
+  MapPin,
+  Building
 } from 'lucide-react';
-import { Doctor, Appointment, Specialty, Facility, AdminProfile } from '../types';
+import { Doctor, Appointment, Specialty, Facility, AdminProfile, District } from '../types';
 import { getAdmins, createAdminUser, updateAdminRole, revokeAdminAccess } from '../lib/supabase';
 
 interface AdminDashboardProps {
@@ -21,25 +23,39 @@ interface AdminDashboardProps {
   appointments: Appointment[];
   specialties: Specialty[];
   facilities: Facility[];
+  districts: District[];
   currentAdmin: AdminProfile | null;
   onAddDoctor: (doc: Doctor) => void;
   onUpdateDoctor: (doc: Doctor) => void;
   onDeleteDoctor: (id: string) => void;
   onUpdateAppointmentStatus: (id: string, status: Appointment['status']) => void;
+  onAddDistrict: (dist: Omit<District, 'id'>) => Promise<void>;
+  onUpdateDistrict: (dist: District) => Promise<void>;
+  onDeleteDistrict: (id: string) => Promise<void>;
+  onAddFacility: (fac: Omit<Facility, 'id'>) => Promise<void>;
+  onUpdateFacility: (fac: Facility) => Promise<void>;
+  onDeleteFacility: (id: string) => Promise<void>;
 }
 
-type AdminSubTab = 'appointments' | 'doctors' | 'admins';
+type AdminSubTab = 'appointments' | 'doctors' | 'admins' | 'districts' | 'facilities';
 
 export default function AdminDashboard({
   doctors,
   appointments,
   specialties,
   facilities,
+  districts,
   currentAdmin,
   onAddDoctor,
   onUpdateDoctor,
   onDeleteDoctor,
   onUpdateAppointmentStatus,
+  onAddDistrict,
+  onUpdateDistrict,
+  onDeleteDistrict,
+  onAddFacility,
+  onUpdateFacility,
+  onDeleteFacility,
 }: AdminDashboardProps) {
   const [subTab, setSubTab] = useState<AdminSubTab>('appointments');
   const [editingDoctor, setEditingDoctor] = useState<Doctor | null>(null);
@@ -56,6 +72,142 @@ export default function AdminDashboard({
   const [newAdminRole, setNewAdminRole] = useState<'super_admin' | 'admin'>('admin');
   const [addAdminError, setAddAdminError] = useState<string | null>(null);
   const [addAdminSubmitting, setAddAdminSubmitting] = useState(false);
+
+  // Districts CRUD States
+  const [showAddDistrictModal, setShowAddDistrictModal] = useState(false);
+  const [editingDistrict, setEditingDistrict] = useState<District | null>(null);
+  const [districtNameBn, setDistrictNameBn] = useState('');
+  const [districtNameEn, setDistrictNameEn] = useState('');
+  const [districtOrder, setDistrictOrder] = useState('0');
+  const [districtActive, setDistrictActive] = useState(true);
+
+  // Facilities CRUD States
+  const [showAddFacilityModal, setShowAddFacilityModal] = useState(false);
+  const [editingFacility, setEditingFacility] = useState<Facility | null>(null);
+  const [facilityName, setFacilityName] = useState('');
+  const [facilityAreaAddress, setFacilityAreaAddress] = useState('');
+  const [facilityDistrictId, setFacilityDistrictId] = useState('');
+  const [facilityIsVip, setFacilityIsVip] = useState(false);
+  const [facilityIsActive, setFacilityIsActive] = useState(true);
+
+  // Set default district id on first load
+  useEffect(() => {
+    if (districts.length > 0 && !facilityDistrictId) {
+      setFacilityDistrictId(districts[0].id);
+    }
+  }, [districts, facilityDistrictId]);
+
+  const handleDistrictSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!districtNameBn.trim() || !districtNameEn.trim()) {
+      alert('সবগুলো ফিল্ড সঠিকভাবে পূরণ করুন।');
+      return;
+    }
+    const orderNum = parseInt(districtOrder) || 0;
+    try {
+      if (editingDistrict) {
+        await onUpdateDistrict({
+          id: editingDistrict.id,
+          nameBn: districtNameBn.trim(),
+          nameEn: districtNameEn.trim(),
+          displayOrder: orderNum,
+          isActive: districtActive,
+        });
+        setSuccessMsg('জেলা সফলভাবে আপডেট করা হয়েছে!');
+      } else {
+        await onAddDistrict({
+          nameBn: districtNameBn.trim(),
+          nameEn: districtNameEn.trim(),
+          displayOrder: orderNum,
+          isActive: districtActive,
+        });
+        setSuccessMsg('নতুন জেলা সফলভাবে তৈরি করা হয়েছে!');
+      }
+      setShowAddDistrictModal(false);
+      setEditingDistrict(null);
+      setDistrictNameBn('');
+      setDistrictNameEn('');
+      setDistrictOrder('0');
+      setDistrictActive(true);
+      setTimeout(() => setSuccessMsg(''), 4000);
+    } catch (err: any) {
+      alert(err.message || 'সংরক্ষণ ব্যর্থ হয়েছে।');
+    }
+  };
+
+  const handleFacilitySubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!facilityName.trim() || !facilityAreaAddress.trim()) {
+      alert('সবগুলো ফিল্ড সঠিকভাবে পূরণ করুন।');
+      return;
+    }
+    const activeDistrictId = facilityDistrictId || districts[0]?.id || 'rajshahi';
+    try {
+      if (editingFacility) {
+        await onUpdateFacility({
+          id: editingFacility.id,
+          districtId: activeDistrictId,
+          name: facilityName.trim(),
+          areaAddress: facilityAreaAddress.trim(),
+          contactPhone: '', // no phone input allowed, as requested!
+          isVip: facilityIsVip,
+          isActive: facilityIsActive,
+        });
+        setSuccessMsg('চেম্বার/ক্লিনিক সফলভাবে আপডেট করা হয়েছে!');
+      } else {
+        await onAddFacility({
+          districtId: activeDistrictId,
+          name: facilityName.trim(),
+          areaAddress: facilityAreaAddress.trim(),
+          contactPhone: '', // no phone input allowed, as requested!
+          isVip: facilityIsVip,
+          isActive: facilityIsActive,
+        });
+        setSuccessMsg('নতুন চেম্বার/ক্লিনিক সফলভাবে যোগ করা হয়েছে!');
+      }
+      setShowAddFacilityModal(false);
+      setEditingFacility(null);
+      setFacilityName('');
+      setFacilityAreaAddress('');
+      setFacilityIsVip(false);
+      setFacilityIsActive(true);
+      setTimeout(() => setSuccessMsg(''), 4000);
+    } catch (err: any) {
+      alert(err.message || 'সংরক্ষণ ব্যর্থ হয়েছে।');
+    }
+  };
+
+  const handleDistrictDelete = async (id: string, name: string) => {
+    const hasClinics = facilities.some((f) => f.districtId === id);
+    const msg = hasClinics 
+      ? `সাবধান! এই জেলার (${name}) অধীনে সক্রিয় চেম্বার/ক্লিনিক রয়েছে। জেলাটি ডিলিট করলে ঐ সকল চেম্বারের জেলা লিঙ্ক নষ্ট হবে। আপনি কি নিশ্চিতভাবে ডিলিট করতে চান?`
+      : `আপনি কি নিশ্চিতভাবে এই জেলাটি (${name}) ডিলিট করতে চান?`;
+    if (confirm(msg)) {
+      try {
+        await onDeleteDistrict(id);
+        setSuccessMsg('জেলা সফলভাবে ডিলিট করা হয়েছে!');
+        setTimeout(() => setSuccessMsg(''), 4000);
+      } catch (err: any) {
+        alert(err.message || 'ডিলিট করতে ব্যর্থ হয়েছে।');
+      }
+    }
+  };
+
+  const handleFacilityDelete = async (id: string, name: string) => {
+    const hasDoctors = doctors.some((d) => d.facility === name);
+    const msg = hasDoctors 
+      ? `সাবধান! এই ক্লিনিক/চেম্বারটির (${name}) অধীনে তালিকাভুক্ত ডাক্তার রয়েছে। এটি ডিলিট করলে ঐ ডাক্তারদের চেম্বারের নাম খালি দেখাবে। আপনি কি নিশ্চিতভাবে ডিলিট করতে চান?`
+      : `আপনি কি নিশ্চিতভাবে এই ক্লিনিক/চেম্বারটি (${name}) ডিলিট করতে চান?`;
+    if (confirm(msg)) {
+      try {
+        await onDeleteFacility(id);
+        setSuccessMsg('চেম্বার/ক্লিনিক সফলভাবে ডিলিট করা হয়েছে!');
+        setTimeout(() => setSuccessMsg(''), 4000);
+      } catch (err: any) {
+        alert(err.message || 'ডিলিট করতে ব্যর্থ হয়েছে।');
+      }
+    }
+  };
 
   const loadAdmins = async () => {
     setAdminsLoading(true);
@@ -341,6 +493,30 @@ export default function AdminDashboard({
             <span>অ্যাডমিন প্যানেল ব্যবহারকারী ({adminProfiles.length})</span>
           </button>
         )}
+        <button
+          onClick={() => setSubTab('districts')}
+          className={`flex items-center gap-2 border-b-2 px-5 py-2.5 text-xs font-bold transition cursor-pointer ${
+            subTab === 'districts'
+              ? 'border-[#0284C7] text-[#0284C7]'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
+          }`}
+          id="admin-subtab-districts-btn"
+        >
+          <MapPin className="h-4 w-4 text-[#0284C7]" />
+          <span>জেলা সমূহ ({districts.length})</span>
+        </button>
+        <button
+          onClick={() => setSubTab('facilities')}
+          className={`flex items-center gap-2 border-b-2 px-5 py-2.5 text-xs font-bold transition cursor-pointer ${
+            subTab === 'facilities'
+              ? 'border-[#0284C7] text-[#0284C7]'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
+          }`}
+          id="admin-subtab-facilities-btn"
+        >
+          <Building className="h-4 w-4 text-pink-600" />
+          <span>চেম্বার ও ক্লিনিক ({facilities.length})</span>
+        </button>
       </div>
 
       {/* SUBTAB 1: Appointment Request Management Table */}
@@ -993,6 +1169,397 @@ export default function AdminDashboard({
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* SUBTAB 4: District Management */}
+      {subTab === 'districts' && (
+        <div className="space-y-4 animate-in fade-in duration-150">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-sm font-bold text-slate-800">জেলা তালিকা ও প্রদর্শন ক্রম নির্ধারণ</h2>
+              <p className="text-[10px] text-slate-400 mt-0.5 font-bold">সক্রিয় জেলা সমূহ ডিরেক্টরি ফিল্টারে দৃশ্যমান হবে</p>
+            </div>
+            <button
+              onClick={() => {
+                setEditingDistrict(null);
+                setDistrictNameBn('');
+                setDistrictNameEn('');
+                setDistrictOrder('0');
+                setDistrictActive(true);
+                setShowAddDistrictModal(true);
+              }}
+              className="flex items-center gap-1.5 rounded-lg bg-[#0284C7] hover:bg-[#0274af] px-3.5 py-2 text-xs font-bold text-white transition cursor-pointer"
+            >
+              <PlusCircle className="h-3.5 w-3.5" />
+              <span>নতুন জেলা যোগ করুন</span>
+            </button>
+          </div>
+
+          <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200">
+                  <th className="p-3 text-[11px]">জেলা আইডি</th>
+                  <th className="p-3 text-[11px]">নাম (বাংলা)</th>
+                  <th className="p-3 text-[11px]">নাম (English)</th>
+                  <th className="p-3 text-[11px]">প্রদর্শন ক্রম</th>
+                  <th className="p-3 text-[11px]">স্ট্যাটাস (Status)</th>
+                  <th className="p-3 text-center text-[11px]">অ্যাকশন</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 font-bold text-slate-700">
+                {districts.map((dist) => (
+                  <tr key={dist.id} className="hover:bg-slate-50/50">
+                    <td className="p-3 font-mono text-[10px] text-slate-400">{dist.id}</td>
+                    <td className="p-3 text-[#0284C7] text-xs">{dist.nameBn}</td>
+                    <td className="p-3 text-xs">{dist.nameEn}</td>
+                    <td className="p-3 font-mono text-xs">{dist.displayOrder}</td>
+                    <td className="p-3">
+                      <span className={`inline-flex rounded-full px-2 py-0.5 text-[9px] ${
+                        dist.isActive
+                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                          : 'bg-slate-100 text-slate-400 border border-slate-200'
+                      }`}>
+                        {dist.isActive ? 'সক্রিয় (Active)' : 'নিষ্ক্রিয়'}
+                      </span>
+                    </td>
+                    <td className="p-3">
+                      <div className="flex items-center justify-center gap-2">
+                        <button
+                          onClick={() => {
+                            setEditingDistrict(dist);
+                            setDistrictNameBn(dist.nameBn);
+                            setDistrictNameEn(dist.nameEn);
+                            setDistrictOrder(dist.displayOrder.toString());
+                            setDistrictActive(dist.isActive);
+                            setShowAddDistrictModal(true);
+                          }}
+                          className="inline-flex items-center gap-1 rounded bg-slate-50 border border-slate-200 text-[10px] text-slate-600 hover:border-slate-400 py-1 px-2 cursor-pointer"
+                        >
+                          <Edit2 className="h-3 w-3" />
+                          <span>সম্পাদনা</span>
+                        </button>
+                        <button
+                          onClick={() => handleDistrictDelete(dist.id, dist.nameBn)}
+                          className="inline-flex items-center gap-1 rounded bg-red-50 border border-red-100 text-[10px] text-red-600 hover:bg-red-100 py-1 px-2 cursor-pointer"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                          <span>মুছুন</span>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* SUBTAB 5: Facilities Management */}
+      {subTab === 'facilities' && (
+        <div className="space-y-4 animate-in fade-in duration-150">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-sm font-bold text-slate-800">চেম্বার, ক্লিনিক ও ডায়াগনস্টিক সেন্টার সমূহ</h2>
+              <p className="text-[10px] text-slate-400 mt-0.5 font-bold">ভিআইপি (VIP) চিকিৎসাকেন্দ্র সমূহে বিশেষ স্টার ব্যাজ প্রদর্শিত হয়</p>
+            </div>
+            <button
+              onClick={() => {
+                setEditingFacility(null);
+                setFacilityName('');
+                setFacilityAreaAddress('');
+                setFacilityDistrictId(districts[0]?.id || 'rajshahi');
+                setFacilityIsVip(false);
+                setFacilityIsActive(true);
+                setShowAddFacilityModal(true);
+              }}
+              className="flex items-center gap-1.5 rounded-lg bg-[#0284C7] hover:bg-[#0274af] px-3.5 py-2 text-xs font-bold text-white transition cursor-pointer"
+            >
+              <PlusCircle className="h-3.5 w-3.5" />
+              <span>নতুন চেম্বার/ক্লিনিক যোগ করুন</span>
+            </button>
+          </div>
+
+          <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200">
+                  <th className="p-3 text-[11px]">নাম (Facility Name)</th>
+                  <th className="p-3 text-[11px]">জেলা (District)</th>
+                  <th className="p-3 text-[11px]">অবস্থান / চেম্বার ঠিকানা</th>
+                  <th className="p-3 text-[11px]">ভিআইপি (VIP)?</th>
+                  <th className="p-3 text-[11px]">স্ট্যাটাস</th>
+                  <th className="p-3 text-center text-[11px]">অ্যাকশন</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 font-bold text-slate-700">
+                {facilities.map((fac) => (
+                  <tr key={fac.id} className="hover:bg-slate-50/50">
+                    <td className="p-3 text-slate-900 text-xs">
+                      <span className="flex items-center gap-1.5">
+                        <Building className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                        <span>{fac.name}</span>
+                      </span>
+                    </td>
+                    <td className="p-3 text-xs">
+                      <span className="inline-flex rounded bg-sky-50 px-1.5 py-0.5 text-[10px] text-[#0284C7] border border-sky-100">
+                        {fac.districtName || 'রাজশাহী'}
+                      </span>
+                    </td>
+                    <td className="p-3 text-slate-500 text-xs font-semibold">{fac.areaAddress}</td>
+                    <td className="p-3">
+                      {fac.isVip ? (
+                        <span className="inline-flex rounded-full bg-amber-50 px-2.5 py-0.5 text-[9px] text-amber-700 border border-amber-200">
+                          ★ VIP Clinic
+                        </span>
+                      ) : (
+                        <span className="text-slate-400 text-[10px] font-normal">সাধারণ</span>
+                      )}
+                    </td>
+                    <td className="p-3">
+                      <span className={`inline-flex rounded-full px-2 py-0.5 text-[9px] ${
+                        fac.isActive
+                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                          : 'bg-slate-100 text-slate-400 border border-slate-200'
+                      }`}>
+                        {fac.isActive ? 'সক্রিয় (Active)' : 'নিষ্ক্রিয়'}
+                      </span>
+                    </td>
+                    <td className="p-3">
+                      <div className="flex items-center justify-center gap-2">
+                        <button
+                          onClick={() => {
+                            setEditingFacility(fac);
+                            setFacilityName(fac.name);
+                            setFacilityAreaAddress(fac.areaAddress);
+                            setFacilityDistrictId(fac.districtId);
+                            setFacilityIsVip(fac.isVip);
+                            setFacilityIsActive(fac.isActive);
+                            setShowAddFacilityModal(true);
+                          }}
+                          className="inline-flex items-center gap-1 rounded bg-slate-50 border border-slate-200 text-[10px] text-slate-600 hover:border-slate-400 py-1 px-2 cursor-pointer"
+                        >
+                          <Edit2 className="h-3 w-3" />
+                          <span>সম্পাদনা</span>
+                        </button>
+                        <button
+                          onClick={() => handleFacilityDelete(fac.id, fac.name)}
+                          className="inline-flex items-center gap-1 rounded bg-red-50 border border-red-100 text-[10px] text-red-600 hover:bg-red-100 py-1 px-2 cursor-pointer"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                          <span>মুছুন</span>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Add / Edit District Modal Overlay */}
+      {showAddDistrictModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 animate-in fade-in duration-100">
+          <div className="w-full max-w-md bg-white rounded-xl border border-slate-200 shadow-xl overflow-hidden animate-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4 bg-slate-50/50">
+              <h3 className="font-extrabold text-slate-800 text-sm">
+                {editingDistrict ? 'জেলা তথ্য সংশোধন' : 'নতুন জেলা সংযোজন'}
+              </h3>
+              <button
+                onClick={() => {
+                  setShowAddDistrictModal(false);
+                  setEditingDistrict(null);
+                }}
+                className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700 cursor-pointer"
+              >
+                <X className="h-4.5 w-4.5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleDistrictSubmit} className="p-6 space-y-4 text-xs font-semibold">
+              <div>
+                <label className="block text-slate-500 mb-1 font-bold"> can জেলার নাম (বাংলা)</label>
+                <input
+                  type="text"
+                  required
+                  value={districtNameBn}
+                  onChange={(e) => setDistrictNameBn(e.target.value)}
+                  className="w-full rounded-lg border border-slate-200 bg-slate-50/50 py-2 px-3 text-xs font-bold text-slate-800 outline-none focus:border-[#0284C7] focus:bg-white"
+                  placeholder="যেমন: রাজশাহী"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-500 mb-1 font-bold">District Name (English)</label>
+                <input
+                  type="text"
+                  required
+                  value={districtNameEn}
+                  onChange={(e) => setDistrictNameEn(e.target.value)}
+                  className="w-full rounded-lg border border-slate-200 bg-slate-50/50 py-2 px-3 text-xs font-bold text-slate-800 outline-none focus:border-[#0284C7] focus:bg-white"
+                  placeholder="যেমন: Rajshahi"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-500 mb-1 font-bold">প্রদর্শন ক্রম (Display Order)</label>
+                <input
+                  type="number"
+                  required
+                  value={districtOrder}
+                  onChange={(e) => setDistrictOrder(e.target.value)}
+                  className="w-full rounded-lg border border-slate-200 bg-slate-50/50 py-2 px-3 text-xs font-bold text-slate-800 outline-none focus:border-[#0284C7] focus:bg-white"
+                  placeholder="0"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 py-1">
+                <input
+                  type="checkbox"
+                  id="district-active"
+                  checked={districtActive}
+                  onChange={(e) => setDistrictActive(e.target.checked)}
+                  className="rounded border-slate-300 text-[#0284C7] focus:ring-[#0284C7]"
+                />
+                <label htmlFor="district-active" className="text-slate-700 font-bold cursor-pointer">
+                  সক্রিয় জেলা (Active District)?
+                </label>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAddDistrictModal(false);
+                    setEditingDistrict(null);
+                  }}
+                  className="rounded-lg border border-slate-200 px-4 py-2 text-slate-600 hover:bg-slate-50 transition cursor-pointer"
+                >
+                  বাতিল
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-lg bg-[#0284C7] hover:bg-[#0274af] px-4 py-2 text-white font-bold transition cursor-pointer"
+                >
+                  <span>সংরক্ষণ করুন</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Add / Edit Clinic/Facility Modal Overlay */}
+      {showAddFacilityModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 animate-in fade-in duration-100">
+          <div className="w-full max-w-md bg-white rounded-xl border border-slate-200 shadow-xl overflow-hidden animate-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4 bg-slate-50/50">
+              <h3 className="font-extrabold text-slate-800 text-sm">
+                {editingFacility ? 'ক্লিনিক/চেম্বার তথ্য সংশোধন' : 'নতুন ক্লিনিক/চেম্বার সংযোজন'}
+              </h3>
+              <button
+                onClick={() => {
+                  setShowAddFacilityModal(false);
+                  setEditingFacility(null);
+                }}
+                className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700 cursor-pointer"
+              >
+                <X className="h-4.5 w-4.5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleFacilitySubmit} className="p-6 space-y-4 text-xs font-semibold">
+              <div>
+                <label className="block text-slate-500 mb-1 font-bold">সংশ্লিষ্ট জেলা সিলেক্ট করুন</label>
+                <select
+                  value={facilityDistrictId}
+                  onChange={(e) => setFacilityDistrictId(e.target.value)}
+                  className="w-full rounded-lg border border-slate-200 bg-slate-50/50 py-2 px-3 text-xs font-bold text-slate-800 outline-none focus:border-[#0284C7] focus:bg-white cursor-pointer"
+                >
+                  {districts.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.nameBn} ({d.nameEn})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[#0284C7] mb-1 font-bold">ক্লিনিক/ডায়াগনস্টিক এর নাম</label>
+                <input
+                  type="text"
+                  required
+                  value={facilityName}
+                  onChange={(e) => setFacilityName(e.target.value)}
+                  className="w-full rounded-lg border border-slate-200 bg-slate-50/50 py-2 px-3 text-xs font-bold text-slate-800 outline-none focus:border-[#0284C7] focus:bg-white"
+                  placeholder="যেমন: মেডিপথ ডায়াগনস্টিক, রাজশাহী"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-500 mb-1 font-bold">বিস্তারিত অবস্থান / ঠিকানা</label>
+                <input
+                  type="text"
+                  required
+                  value={facilityAreaAddress}
+                  onChange={(e) => setFacilityAreaAddress(e.target.value)}
+                  className="w-full rounded-lg border border-slate-200 bg-slate-50/50 py-2 px-3 text-xs font-bold text-slate-800 outline-none focus:border-[#0284C7] focus:bg-white"
+                  placeholder="যেমন: লক্ষ্মীপুর মোড়, রাজশাহী"
+                />
+              </div>
+
+              <div className="flex items-center gap-4 py-1">
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="checkbox"
+                    id="fac-vip"
+                    checked={facilityIsVip}
+                    onChange={(e) => setFacilityIsVip(e.target.checked)}
+                    className="rounded border-slate-300 text-amber-500 focus:ring-amber-500"
+                  />
+                  <label htmlFor="fac-vip" className="text-slate-700 font-bold cursor-pointer">
+                    ভিআইপি (VIP Center)?
+                  </label>
+                </div>
+
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="checkbox"
+                    id="fac-active"
+                    checked={facilityIsActive}
+                    onChange={(e) => setFacilityIsActive(e.target.checked)}
+                    className="rounded border-slate-300 text-[#0284C7] focus:ring-[#0284C7]"
+                  />
+                  <label htmlFor="fac-active" className="text-slate-700 font-bold cursor-pointer">
+                    সক্রিয় (Active)?
+                  </label>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAddFacilityModal(false);
+                    setEditingFacility(null);
+                  }}
+                  className="rounded-lg border border-slate-200 px-4 py-2 text-slate-600 hover:bg-slate-50 transition cursor-pointer"
+                >
+                  বাতিল
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-lg bg-[#0284C7] hover:bg-[#0274af] px-4 py-2 text-white font-bold transition cursor-pointer"
+                >
+                  <span>সংরক্ষণ করুন</span>
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>

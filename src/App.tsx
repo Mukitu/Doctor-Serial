@@ -23,7 +23,13 @@ import {
   rejectAppointment,
   resetAppointmentToPending,
   getCurrentAdmin,
-  signOut as apiSignOut
+  signOut as apiSignOut,
+  addDistrict,
+  updateDistrict,
+  deleteDistrict,
+  addFacility,
+  updateFacility,
+  deleteFacility
 } from './lib/supabase';
 
 export default function App() {
@@ -94,32 +100,50 @@ export default function App() {
     loadSession();
   }, []);
 
-  // Sync URL route states for /portal-login and /admin
+  // Sync URL route states for /portal-login and /admin with safe hash-based routing fallback
   useEffect(() => {
     const handleLocationChange = () => {
       const path = window.location.pathname;
-      if (path === '/portal-login' || path.endsWith('/portal-login')) {
+      const hash = window.location.hash;
+      
+      if (path === '/portal-login' || path.endsWith('/portal-login') || hash === '#/portal-login' || hash === '#portal-login') {
         setActiveTab('portal-login');
-      } else if (path === '/admin' || path.endsWith('/admin')) {
+        if (!hash) {
+          window.history.replaceState({}, '', '/#/portal-login');
+        }
+      } else if (path === '/admin' || path.endsWith('/admin') || hash === '#/admin' || hash === '#admin') {
         if (currentAdmin) {
           setActiveTab('admin');
+          if (!hash) {
+            window.history.replaceState({}, '', '/#/admin');
+          }
         } else {
           setActiveTab('portal-login');
-          window.history.replaceState({}, '', '/portal-login');
+          window.history.replaceState({}, '', '/#/portal-login');
         }
+      } else if (hash === '#/doctors' || hash === '#doctors') {
+        setActiveTab('doctors');
+      } else if (hash === '#/track' || hash === '#track') {
+        setActiveTab('track');
+      } else if (hash === '#/' || hash === '#home' || hash === '#/home' || (!hash && path === '/')) {
+        setActiveTab('home');
       }
     };
 
     handleLocationChange();
     window.addEventListener('popstate', handleLocationChange);
-    return () => window.removeEventListener('popstate', handleLocationChange);
+    window.addEventListener('hashchange', handleLocationChange);
+    return () => {
+      window.removeEventListener('popstate', handleLocationChange);
+      window.removeEventListener('hashchange', handleLocationChange);
+    };
   }, [currentAdmin]);
 
   // Client-side route protection guard
   useEffect(() => {
     if (activeTab === 'admin' && !currentAdmin) {
       setActiveTab('portal-login');
-      window.history.pushState({}, '', '/portal-login');
+      window.history.pushState({}, '', '/#/portal-login');
     }
   }, [activeTab, currentAdmin]);
 
@@ -142,11 +166,15 @@ export default function App() {
 
   const handleTabChange = (tab: ActiveTab) => {
     if (tab === 'portal-login') {
-      window.history.pushState({}, '', '/portal-login');
+      window.history.pushState({}, '', '/#/portal-login');
     } else if (tab === 'admin') {
-      window.history.pushState({}, '', '/admin');
+      window.history.pushState({}, '', '/#/admin');
+    } else if (tab === 'doctors') {
+      window.history.pushState({}, '', '/#/doctors');
+    } else if (tab === 'track') {
+      window.history.pushState({}, '', '/#/track');
     } else {
-      window.history.pushState({}, '', '/');
+      window.history.pushState({}, '', '/#/');
     }
     setActiveTab(tab);
   };
@@ -159,7 +187,7 @@ export default function App() {
     }
     setCurrentAdmin(null);
     setActiveTab('home');
-    window.history.pushState({}, '', '/');
+    window.history.pushState({}, '', '/#/');
   };
 
   // State mutation actions linked directly to the dynamic service layer
@@ -197,6 +225,66 @@ export default function App() {
       console.error('Failed to delete doctor:', err);
       // Client-side fallback if offline
       setDoctors((prev) => prev.filter((d) => d.id !== id));
+    }
+  };
+
+  const handleAddDistrict = async (newDist: Omit<District, 'id'>) => {
+    try {
+      await addDistrict(newDist);
+      const refreshed = await getDistricts();
+      setDistricts(refreshed);
+    } catch (err) {
+      console.error('Failed to add district:', err);
+    }
+  };
+
+  const handleUpdateDistrict = async (updatedDist: District) => {
+    try {
+      await updateDistrict(updatedDist);
+      const refreshed = await getDistricts();
+      setDistricts(refreshed);
+    } catch (err) {
+      console.error('Failed to update district:', err);
+    }
+  };
+
+  const handleDeleteDistrict = async (id: string) => {
+    try {
+      await deleteDistrict(id);
+      const refreshed = await getDistricts();
+      setDistricts(refreshed);
+    } catch (err) {
+      console.error('Failed to delete district:', err);
+    }
+  };
+
+  const handleAddFacility = async (newFac: Omit<Facility, 'id'>) => {
+    try {
+      await addFacility(newFac);
+      const refreshed = await getFacilities();
+      setFacilities(refreshed);
+    } catch (err) {
+      console.error('Failed to add facility:', err);
+    }
+  };
+
+  const handleUpdateFacility = async (updatedFac: Facility) => {
+    try {
+      await updateFacility(updatedFac);
+      const refreshed = await getFacilities();
+      setFacilities(refreshed);
+    } catch (err) {
+      console.error('Failed to update facility:', err);
+    }
+  };
+
+  const handleDeleteFacility = async (id: string) => {
+    try {
+      await deleteFacility(id);
+      const refreshed = await getFacilities();
+      setFacilities(refreshed);
+    } catch (err) {
+      console.error('Failed to delete facility:', err);
     }
   };
 
@@ -417,11 +505,18 @@ export default function App() {
             appointments={appointments}
             specialties={specialties}
             facilities={facilities}
+            districts={districts}
             currentAdmin={currentAdmin}
             onAddDoctor={handleAddDoctor}
             onUpdateDoctor={handleUpdateDoctor}
             onDeleteDoctor={handleDeleteDoctor}
             onUpdateAppointmentStatus={handleUpdateAppointmentStatus}
+            onAddDistrict={handleAddDistrict}
+            onUpdateDistrict={handleUpdateDistrict}
+            onDeleteDistrict={handleDeleteDistrict}
+            onAddFacility={handleAddFacility}
+            onUpdateFacility={handleUpdateFacility}
+            onDeleteFacility={handleDeleteFacility}
           />
         )}
       </main>

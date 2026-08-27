@@ -10,10 +10,6 @@ export const POPULAR_SPECIALTIES = [
 
 export const DISTRICTS = [
   { id: 'rajshahi', name: 'রাজশাহী', nameEn: 'Rajshahi' },
-  { id: 'dhaka', name: 'ঢাকা', nameEn: 'Dhaka' },
-  { id: 'chittagong', name: 'চট্টগ্রাম', nameEn: 'Chittagong' },
-  { id: 'khulna', name: 'খুলনা', nameEn: 'Khulna' },
-  { id: 'sylhet', name: 'সিলেট', nameEn: 'Sylhet' },
 ];
 
 export const FACILITIES = [
@@ -21,6 +17,7 @@ export const FACILITIES = [
   { id: 'amana', name: 'আমানা হাসপাতাল, রাজশাহী' },
   { id: 'labaid', name: 'ল্যাবএইড ডায়াগনস্টিক, রাজশাহী' },
   { id: 'royal', name: 'রয়্যাল হাসপাতাল, রাজশাহী' },
+  { id: 'medipath', name: 'মেডিপথ ডায়াগনস্টিক, রাজশাহী' },
 ];
 
 export const INITIAL_DOCTORS: Doctor[] = [
@@ -161,15 +158,4 @@ export const INITIAL_APPOINTMENTS: Appointment[] = [
     status: 'Confirmed',
     createdAt: '2026-08-26T15:30:00Z',
   },
-  {
-    id: 'RJ-9231',
-    doctorId: 'doc-3',
-    doctorName: 'ডা. সাজ্জাদ হোসেন',
-    patientName: 'মো: শফিকুল ইসলাম',
-    patientAge: 58,
-    patientMobile: '01555443322',
-    preferredDate: '2026-08-30',
-    status: 'Cancelled',
-    createdAt: '2026-08-25T11:20:00Z',
-  }
 ];
