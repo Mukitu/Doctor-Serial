@@ -55,7 +55,10 @@ export async function getDistricts(): Promise<District[]> {
       .select('*')
       .order('display_order', { ascending: true });
 
-    if (error) throw error;
+    if (error) {
+      console.error('[Supabase] Failed to fetch districts table:', error.message, error.details, error.hint);
+      throw error;
+    }
     return (data || []).map(d => ({
       id: d.id,
       nameBn: d.name_bn,
@@ -63,10 +66,17 @@ export async function getDistricts(): Promise<District[]> {
       isActive: d.is_active,
       displayOrder: d.display_order
     }));
-  } catch (err) {
-    console.error('Error fetching districts:', err);
+  } catch (err: any) {
+    console.error('[Supabase getDistricts error]:', err?.message || err);
     const saved = localStorage.getItem('sheba_districts');
-    return saved ? JSON.parse(saved) : [];
+    if (saved) return JSON.parse(saved);
+    return DISTRICTS.map((d, i) => ({
+      id: d.id,
+      nameBn: d.name,
+      nameEn: d.nameEn,
+      isActive: true,
+      displayOrder: i
+    }));
   }
 }
 
@@ -171,7 +181,10 @@ export async function getSpecialties(): Promise<Specialty[]> {
       .select('*')
       .order('display_order', { ascending: true });
 
-    if (error) throw error;
+    if (error) {
+      console.error('[Supabase] Failed to fetch specialties table:', error.message, error.details, error.hint);
+      throw error;
+    }
     return (data || []).map(s => ({
       id: s.id,
       nameBn: s.name_bn,
@@ -180,10 +193,18 @@ export async function getSpecialties(): Promise<Specialty[]> {
       isActive: s.is_active,
       displayOrder: s.display_order
     }));
-  } catch (err) {
-    console.error('Error fetching specialties:', err);
+  } catch (err: any) {
+    console.error('[Supabase getSpecialties error]:', err?.message || err);
     const saved = localStorage.getItem('sheba_specialties');
-    return saved ? JSON.parse(saved) : [];
+    if (saved) return JSON.parse(saved);
+    return POPULAR_SPECIALTIES.map((s, i) => ({
+      id: s.id,
+      nameBn: s.name,
+      nameEn: s.labelEn,
+      iconName: s.icon,
+      isActive: true,
+      displayOrder: i
+    }));
   }
 }
 
@@ -287,18 +308,23 @@ export async function getFacilities(): Promise<Facility[]> {
   }
 
   try {
-    const { data, error } = await supabase
-      .from('facilities')
-      .select(`
-        *,
-        districts (
-          name_bn
-        )
-      `)
-      .order('name', { ascending: true });
+    const [facRes, distRes] = await Promise.all([
+      supabase.from('facilities').select('*').order('name', { ascending: true }),
+      supabase.from('districts').select('*')
+    ]);
 
-    if (error) throw error;
-    return (data || []).map(f => ({
+    if (facRes.error) {
+      console.error('[Supabase] Failed to fetch facilities table:', facRes.error.message, facRes.error.details, facRes.error.hint);
+      throw facRes.error;
+    }
+    if (distRes.error) {
+      console.warn('[Supabase] Non-fatal: failed to fetch districts for facility mapping:', distRes.error.message);
+    }
+    const facData = facRes.data || [];
+    const distData = distRes.data || [];
+    const distMap = new Map(distData.map((d: any) => [d.id, d.name_bn]));
+
+    return facData.map((f: any) => ({
       id: f.id,
       districtId: f.district_id,
       name: f.name,
@@ -306,12 +332,22 @@ export async function getFacilities(): Promise<Facility[]> {
       contactPhone: f.contact_phone,
       isVip: f.is_vip,
       isActive: f.is_active,
-      districtName: f.districts?.name_bn || 'রাজশাহী'
+      districtName: distMap.get(f.district_id) || 'রাজশাহী'
     }));
-  } catch (err) {
-    console.error('Error fetching facilities:', err);
+  } catch (err: any) {
+    console.error('[Supabase getFacilities error]:', err?.message || err);
     const saved = localStorage.getItem('sheba_facilities');
-    return saved ? JSON.parse(saved) : [];
+    if (saved) return JSON.parse(saved);
+    return FACILITIES.map(f => ({
+      id: f.id,
+      districtId: 'rajshahi',
+      name: f.name,
+      areaAddress: 'লক্ষ্মীপুর, রাজশাহী সদর',
+      contactPhone: '০১৭০০-০০০০০০',
+      isVip: f.id === 'popular' || f.id === 'amana',
+      isActive: true,
+      districtName: 'রাজশাহী'
+    }));
   }
 }
 
@@ -407,70 +443,119 @@ export async function getDoctors(): Promise<Doctor[]> {
   }
 
   try {
-    const { data, error } = await supabase
-      .from('doctors')
-      .select(`
-        *,
-        specialties (
-          name_bn,
-          name_en
-        ),
-        chambers (
-          id,
-          facility_id,
-          room_no,
-          visiting_days,
-          visiting_time,
-          fee_new,
-          fee_old,
-          facilities (
-            name,
-            area_address,
-            district_id
-          )
-        )
-      `)
-      .order('display_priority', { ascending: true });
+    const [docsRes, specsRes, chambersRes, facilitiesRes] = await Promise.all([
+      supabase.from('doctors').select('*').order('display_priority', { ascending: true }),
+      supabase.from('specialties').select('*'),
+      supabase.from('chambers').select('*'),
+      supabase.from('facilities').select('*')
+    ]);
 
-    if (error) throw error;
+    if (docsRes.error) {
+      console.error('[Supabase] Failed to fetch doctors table:', docsRes.error.message, docsRes.error.details, docsRes.error.hint);
+      throw docsRes.error;
+    }
+    if (specsRes.error) {
+      console.error('[Supabase] Failed to fetch specialties table for doctors:', specsRes.error.message, specsRes.error.details);
+      throw specsRes.error;
+    }
+    if (chambersRes.error) {
+      console.error('[Supabase] Failed to fetch chambers table for doctors:', chambersRes.error.message, chambersRes.error.details);
+      throw chambersRes.error;
+    }
+    if (facilitiesRes.error) {
+      console.error('[Supabase] Failed to fetch facilities table for doctors:', facilitiesRes.error.message, facilitiesRes.error.details);
+      throw facilitiesRes.error;
+    }
+
+    const docs = docsRes.data || [];
+    const specs = specsRes.data || [];
+    const chambers = chambersRes.data || [];
+    const facilities = facilitiesRes.data || [];
+
+    const specMap = new Map(specs.map(s => [s.id, s]));
+    const facilityMap = new Map(facilities.map(f => [f.id, f]));
+    
+    const chamberMap = new Map<string, any[]>();
+    chambers.forEach(ch => {
+      if (!chamberMap.has(ch.doctor_id)) {
+        chamberMap.set(ch.doctor_id, []);
+      }
+      chamberMap.get(ch.doctor_id)!.push(ch);
+    });
 
     const mappedList: Doctor[] = [];
-    (data || []).forEach((doc: any) => {
-      const spec = doc.specialties;
-      const chambers = doc.chambers || [];
-      chambers.forEach((ch: any) => {
-        const fac = ch.facilities;
+    docs.forEach((doc: any) => {
+      const spec = specMap.get(doc.specialty_id);
+      const docChambers = chamberMap.get(doc.id) || [];
+      
+      if (docChambers.length === 0) {
         mappedList.push({
-          id: `${doc.id}::${ch.id}`,
+          id: `${doc.id}::standalone`,
           doctorId: doc.id,
           specialtyId: doc.specialty_id,
           specialtyNameBn: spec?.name_bn || '',
           specialtyNameEn: spec?.name_en || '',
           specialty: spec?.name_bn || 'মেডিসিন',
-          facility: fac?.name || '',
-          chamberAddress: fac?.area_address || '',
+          facility: 'চেম্বার তথ্য যুক্ত করা হয়নি',
+          chamberAddress: '',
           name: doc.name,
-          bmdc: doc.bmdc_number,
-          degrees: doc.degrees,
-          designation: doc.designation,
-          workplace: doc.workplace,
+          bmdc: doc.bmdc_number || '',
+          degrees: doc.degrees || '',
+          designation: doc.designation || '',
+          workplace: doc.workplace || '',
           photoUrl: doc.photo_url || '',
           priorityIndex: doc.display_priority || 0,
           isActive: doc.is_active,
-
-          // Chamber Details joined
-          chamberId: ch.id,
-          facilityId: ch.facility_id,
-          facilityName: fac?.name || '',
-          facilityAddress: fac?.area_address || '',
-          facilityDistrictId: fac?.district_id || '',
-          chamberRoomNo: ch.room_no || '',
-          visitingDays: ch.visiting_days ? ch.visiting_days.split(',').map((d: string) => d.trim()) : [],
-          visitingTime: ch.visiting_time || '',
-          feesNew: ch.fee_new || 0,
-          feesOld: ch.fee_old || 0
+          rating: doc.rating != null ? Number(doc.rating) : 5.0,
+          reviewCount: doc.review_count || 0,
+          chamberId: '',
+          facilityId: '',
+          facilityName: '',
+          facilityAddress: '',
+          facilityDistrictId: '',
+          chamberRoomNo: '',
+          visitingDays: [],
+          visitingTime: '',
+          feesNew: 0,
+          feesOld: 0
         });
-      });
+      } else {
+        docChambers.forEach((ch: any) => {
+          const fac = facilityMap.get(ch.facility_id);
+          mappedList.push({
+            id: `${doc.id}::${ch.id}`,
+            doctorId: doc.id,
+            specialtyId: doc.specialty_id,
+            specialtyNameBn: spec?.name_bn || '',
+            specialtyNameEn: spec?.name_en || '',
+            specialty: spec?.name_bn || 'মেডিসিন',
+            facility: fac?.name || '',
+            chamberAddress: fac?.area_address || '',
+            name: doc.name,
+            bmdc: doc.bmdc_number,
+            degrees: doc.degrees,
+            designation: doc.designation,
+            workplace: doc.workplace,
+            photoUrl: doc.photo_url || '',
+            priorityIndex: doc.display_priority || 0,
+            isActive: doc.is_active,
+            rating: doc.rating != null ? Number(doc.rating) : 5.0,
+            reviewCount: doc.review_count || 0,
+
+            // Chamber Details joined
+            chamberId: ch.id,
+            facilityId: ch.facility_id,
+            facilityName: fac?.name || '',
+            facilityAddress: fac?.area_address || '',
+            facilityDistrictId: fac?.district_id || '',
+            chamberRoomNo: ch.room_no || '',
+            visitingDays: ch.visiting_days ? ch.visiting_days.split(',').map((d: string) => d.trim()) : [],
+            visitingTime: ch.visiting_time || '',
+            feesNew: ch.fee_new || 0,
+            feesOld: ch.fee_old || 0
+          });
+        });
+      }
     });
 
     return mappedList;
@@ -508,7 +593,9 @@ export async function addDoctor(doc: Doctor): Promise<void> {
         workplace: doc.workplace,
         photo_url: doc.photoUrl || '',
         display_priority: doc.priorityIndex,
-        is_active: doc.isActive
+        is_active: doc.isActive,
+        rating: doc.rating || 5.0,
+        review_count: doc.reviewCount || 0
       });
 
     if (docError) throw docError;
@@ -557,7 +644,9 @@ export async function updateDoctor(doc: Doctor): Promise<void> {
         workplace: doc.workplace,
         photo_url: doc.photoUrl || '',
         display_priority: doc.priorityIndex,
-        is_active: doc.isActive
+        is_active: doc.isActive,
+        rating: doc.rating || 5.0,
+        review_count: doc.reviewCount || 0
       })
       .eq('id', docId);
 
@@ -630,34 +719,38 @@ export async function getAppointments(): Promise<Appointment[]> {
   }
 
   try {
-    const { data, error } = await supabase
-      .from('appointments')
-      .select(`
-        *,
-        doctors (
-          name,
-          degrees,
-          specialties (
-            name_bn
-          )
-        ),
-        chambers (
-          facilities (
-            name,
-            area_address
-          )
-        )
-      `)
-      .order('created_at', { ascending: false });
+    const [appointmentsRes, docsRes, chambersRes, facilitiesRes, specsRes] = await Promise.all([
+      supabase.from('appointments').select('*').order('created_at', { ascending: false }),
+      supabase.from('doctors').select('*'),
+      supabase.from('chambers').select('*'),
+      supabase.from('facilities').select('*'),
+      supabase.from('specialties').select('*')
+    ]);
 
-    if (error) throw error;
+    if (appointmentsRes.error) throw appointmentsRes.error;
+    if (docsRes.error) throw docsRes.error;
+    if (chambersRes.error) throw chambersRes.error;
+    if (facilitiesRes.error) throw facilitiesRes.error;
+    if (specsRes.error) throw specsRes.error;
 
-    return (data || []).map((app: any) => {
-      const doc = app.doctors;
-      const spec = doc?.specialties;
-      const ch = app.chambers;
-      const fac = ch?.facilities;
+    const appointmentsData = appointmentsRes.data || [];
+    const docs = docsRes.data || [];
+    const chambers = chambersRes.data || [];
+    const facilities = facilitiesRes.data || [];
+    const specs = specsRes.data || [];
+
+    const docMap = new Map(docs.map(d => [d.id, d]));
+    const chamberMap = new Map(chambers.map(c => [c.id, c]));
+    const facilityMap = new Map(facilities.map(f => [f.id, f]));
+    const specMap = new Map(specs.map(s => [s.id, s]));
+
+    return appointmentsData.map((app: any) => {
+      const doc = docMap.get(app.doctor_id);
+      const spec = doc ? specMap.get(doc.specialty_id) : null;
+      const ch = chamberMap.get(app.chamber_id);
+      const fac = ch ? facilityMap.get(ch.facility_id) : null;
       const phone = app.patient_phone || '';
+
       return {
         id: app.booking_code,
         doctorId: app.doctor_id,

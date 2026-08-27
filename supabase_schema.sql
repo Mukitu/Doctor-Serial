@@ -299,57 +299,57 @@ CREATE POLICY "Admins can view own profile" ON public.admin_profiles
 FOR SELECT TO authenticated
 USING (auth.uid() = id);
 
--- Districts Policies
+-- Districts Policies (Allow public/anon & authenticated read access)
 DROP POLICY IF EXISTS "Anyone can view districts" ON districts;
-CREATE POLICY "Anyone can view districts" ON districts FOR SELECT USING (is_active = true);
+CREATE POLICY "Anyone can view districts" ON districts FOR SELECT TO public USING (true);
 
 DROP POLICY IF EXISTS "Admin full access to districts" ON districts;
 CREATE POLICY "Admin full access to districts" ON districts FOR ALL TO authenticated USING (public.is_admin(auth.uid()));
 
--- Specialties Policies
+-- Specialties Policies (Allow public/anon & authenticated read access)
 DROP POLICY IF EXISTS "Anyone can view specialties" ON specialties;
-CREATE POLICY "Anyone can view specialties" ON specialties FOR SELECT USING (is_active = true);
+CREATE POLICY "Anyone can view specialties" ON specialties FOR SELECT TO public USING (true);
 
 DROP POLICY IF EXISTS "Admin full access to specialties" ON specialties;
 CREATE POLICY "Admin full access to specialties" ON specialties FOR ALL TO authenticated USING (public.is_admin(auth.uid()));
 
--- Facilities Policies
+-- Facilities Policies (Allow public/anon & authenticated read access)
 DROP POLICY IF EXISTS "Anyone can view facilities" ON facilities;
-CREATE POLICY "Anyone can view facilities" ON facilities FOR SELECT USING (is_active = true);
+CREATE POLICY "Anyone can view facilities" ON facilities FOR SELECT TO public USING (true);
 
 DROP POLICY IF EXISTS "Admin full access to facilities" ON facilities;
 CREATE POLICY "Admin full access to facilities" ON facilities FOR ALL TO authenticated USING (public.is_admin(auth.uid()));
 
--- Doctors Policies
+-- Doctors Policies (Allow public/anon & authenticated read access)
 DROP POLICY IF EXISTS "Anyone can view active doctors" ON doctors;
-CREATE POLICY "Anyone can view active doctors" ON doctors FOR SELECT USING (is_active = true);
+CREATE POLICY "Anyone can view active doctors" ON doctors FOR SELECT TO public USING (true);
 
 DROP POLICY IF EXISTS "Admin full access to doctors" ON doctors;
 CREATE POLICY "Admin full access to doctors" ON doctors FOR ALL TO authenticated USING (public.is_admin(auth.uid()));
 
--- Chambers Policies
+-- Chambers Policies (Allow public/anon & authenticated read access)
 DROP POLICY IF EXISTS "Anyone can view chambers" ON chambers;
-CREATE POLICY "Anyone can view chambers" ON chambers FOR SELECT USING (true);
+CREATE POLICY "Anyone can view chambers" ON chambers FOR SELECT TO public USING (true);
 
 DROP POLICY IF EXISTS "Admin full access to chambers" ON chambers;
 CREATE POLICY "Admin full access to chambers" ON chambers FOR ALL TO authenticated USING (public.is_admin(auth.uid()));
 
 -- Appointments Policies
 DROP POLICY IF EXISTS "Anyone can insert appointments" ON appointments;
-CREATE POLICY "Anyone can insert appointments" ON appointments FOR INSERT WITH CHECK (true);
+CREATE POLICY "Anyone can insert appointments" ON appointments FOR INSERT TO public WITH CHECK (true);
 
 DROP POLICY IF EXISTS "Anyone can select appointments by code or phone" ON appointments;
-CREATE POLICY "Anyone can select appointments by code or phone" ON appointments FOR SELECT USING (true);
+CREATE POLICY "Anyone can select appointments by code or phone" ON appointments FOR SELECT TO public USING (true);
 
 DROP POLICY IF EXISTS "Admin full access to appointments" ON appointments;
 CREATE POLICY "Admin full access to appointments" ON appointments FOR ALL TO authenticated USING (public.is_admin(auth.uid()));
 
 -- Reviews Policies
 DROP POLICY IF EXISTS "Anyone can view approved reviews" ON reviews;
-CREATE POLICY "Anyone can view approved reviews" ON reviews FOR SELECT USING (is_approved = true);
+CREATE POLICY "Anyone can view approved reviews" ON reviews FOR SELECT TO public USING (is_approved = true);
 
 DROP POLICY IF EXISTS "Anyone can insert reviews" ON reviews;
-CREATE POLICY "Anyone can insert reviews" ON reviews FOR INSERT WITH CHECK (NOT is_approved);
+CREATE POLICY "Anyone can insert reviews" ON reviews FOR INSERT TO public WITH CHECK (NOT is_approved);
 
 DROP POLICY IF EXISTS "Admin full access to reviews" ON reviews;
 CREATE POLICY "Admin full access to reviews" ON reviews FOR ALL TO authenticated USING (public.is_admin(auth.uid()));

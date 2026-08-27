@@ -10,7 +10,14 @@ import {
   Clock, 
   CalendarCheck,
   Building,
-  UserCheck
+  UserCheck,
+  MapPin,
+  Eye,
+  Brain,
+  Pill,
+  Award,
+  ShieldCheck,
+  Sparkles
 } from 'lucide-react';
 import { POPULAR_SPECIALTIES, DISTRICTS, FACILITIES } from '../data/mockData';
 import { ActiveTab, District, Specialty, Facility } from '../types';
@@ -19,6 +26,7 @@ interface HeroProps {
   setActiveTab: (tab: ActiveTab) => void;
   setSearchFilters: (filters: { district: string; specialty: string; facility: string }) => void;
   selectedDistrict: string;
+  setSelectedDistrict?: (district: string) => void;
   districts?: District[];
   specialties?: Specialty[];
   facilities?: Facility[];
@@ -28,6 +36,7 @@ export default function Hero({
   setActiveTab, 
   setSearchFilters, 
   selectedDistrict,
+  setSelectedDistrict,
   districts = [],
   specialties = [],
   facilities = [],
@@ -54,31 +63,69 @@ export default function Hero({
     setActiveTab('doctors');
   };
 
-  // Icon helper mapping to prevent dynamic key resolution issues
-  const renderSpecialtyIcon = (iconName: string) => {
-    switch (iconName) {
-      case 'Stethoscope':
-        return <Stethoscope className="h-6 w-6 text-[#0284C7]" />;
-      case 'Heart':
-        return <Heart className="h-6 w-6 text-[#0D9488]" />;
-      case 'Baby':
-        return <Baby className="h-6 w-6 text-amber-500" />;
-      case 'User':
-        return <UserCheck className="h-6 w-6 text-pink-500" />;
-      case 'Activity':
-        return <Activity className="h-6 w-6 text-emerald-500" />;
-      default:
-        return <Stethoscope className="h-6 w-6 text-sky-500" />;
+  // Icon helper mapping to support all common specialty icons dynamically
+  const renderSpecialtyIcon = (iconName: string = '') => {
+    const norm = (iconName || '').toLowerCase().trim();
+    if (norm.includes('heart') || norm.includes('cardio') || norm.includes('হৃদ')) {
+      return <Heart className="h-5.5 w-5.5 text-rose-500" />;
     }
+    if (norm.includes('baby') || norm.includes('pediatric') || norm.includes('শিশু') || norm.includes('child')) {
+      return <Baby className="h-5.5 w-5.5 text-amber-500" />;
+    }
+    if (norm.includes('eye') || norm.includes('vision') || norm.includes('চক্ষু')) {
+      return <Eye className="h-5.5 w-5.5 text-indigo-500" />;
+    }
+    if (norm.includes('brain') || norm.includes('neuro') || norm.includes('মস্তিষ্ক')) {
+      return <Brain className="h-5.5 w-5.5 text-purple-500" />;
+    }
+    if (norm.includes('user') || norm.includes('gyn') || norm.includes('women') || norm.includes('নারী') || norm.includes('গাইনি')) {
+      return <UserCheck className="h-5.5 w-5.5 text-pink-500" />;
+    }
+    if (norm.includes('bone') || norm.includes('ortho') || norm.includes('হাড়')) {
+      return <Activity className="h-5.5 w-5.5 text-emerald-500" />;
+    }
+    if (norm.includes('pill') || norm.includes('pharma') || norm.includes('ঔষধ')) {
+      return <Pill className="h-5.5 w-5.5 text-teal-500" />;
+    }
+    if (norm.includes('award') || norm.includes('medal') || norm.includes('star')) {
+      return <Award className="h-5.5 w-5.5 text-amber-600" />;
+    }
+    if (norm.includes('shield')) {
+      return <ShieldCheck className="h-5.5 w-5.5 text-emerald-600" />;
+    }
+    if (norm.includes('sparkle')) {
+      return <Sparkles className="h-5.5 w-5.5 text-yellow-500" />;
+    }
+    return <Stethoscope className="h-5.5 w-5.5 text-[#0284C7]" />;
   };
 
   // Resolve dynamic vs static lists
-  const renderedSpecialties = specialties.length > 0 
-    ? specialties.map(s => ({ id: s.id, name: s.nameBn, labelEn: s.nameEn, icon: s.iconName }))
+  const renderedDistricts = (districts && districts.length > 0)
+    ? districts
+        .filter(d => d.isActive !== false)
+        .sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0))
+        .map(d => ({ id: d.id, name: d.nameBn, nameEn: d.nameEn }))
+    : DISTRICTS;
+
+  const renderedSpecialties = (specialties && specialties.length > 0)
+    ? specialties
+        .filter(s => s.isActive !== false)
+        .sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0))
+        .map(s => ({ id: s.id, name: s.nameBn, labelEn: s.nameEn, icon: s.iconName }))
     : POPULAR_SPECIALTIES;
 
-  const renderedFacilities = facilities.length > 0 
-    ? facilities.filter(f => !selectedDistrict || f.districtName === selectedDistrict || f.isActive)
+  const currentDistrictObj = districts.find(
+    d => d.nameBn === selectedDistrict || d.id === selectedDistrict || d.nameEn?.toLowerCase() === selectedDistrict.toLowerCase()
+  );
+
+  const renderedFacilities = (facilities && facilities.length > 0)
+    ? facilities.filter(f => {
+        if (!selectedDistrict || selectedDistrict === 'সকল জেলা') return f.isActive !== false;
+        if (currentDistrictObj && f.districtId) {
+          return f.districtId === currentDistrictObj.id || f.districtName === selectedDistrict;
+        }
+        return f.districtName === selectedDistrict || f.isActive !== false;
+      })
     : FACILITIES;
 
   return (
@@ -95,7 +142,7 @@ export default function Hero({
             </span>
           </h1>
           <p className="mx-auto mt-4 max-w-2xl text-xs md:text-sm text-slate-500 font-medium leading-relaxed">
-            রাজশাহী বিভাগের স্বনামধন্য ডাক্তারদের চেম্বার শিডিউল এবং সরাসরি সিরিয়াল বুকিংয়ের আধুনিক প্ল্যাটফর্ম। ঘরে বসেই কয়েক ক্লিকে আপনার ট্র্যাকিং নম্বর সংগ্রহ করুন।
+            {selectedDistrict ? `${selectedDistrict} জেলা ও আশপাশের` : 'সকল জেলার'} স্বনামধন্য ডাক্তারদের চেম্বার শিডিউল এবং সরাসরি সিরিয়াল বুকিংয়ের আধুনিক প্ল্যাটফর্ম। ঘরে বসেই কয়েক ক্লিকে আপনার ট্র্যাকিং নম্বর সংগ্রহ করুন।
           </p>
         </div>
 
@@ -108,16 +155,23 @@ export default function Hero({
           >
             <div className="grid gap-3.5 md:grid-cols-3">
               {/* District Select */}
-              <div className="flex flex-col gap-1 rounded-lg bg-slate-50/60 p-3 border border-slate-200/50">
-                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1">
-                  <Building className="h-3 w-3" /> জেলা
+              <div className="flex flex-col gap-1 rounded-lg bg-slate-50/60 p-3 border border-slate-200/50 focus-within:border-slate-300">
+                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1">
+                  <MapPin className="h-3 w-3 text-slate-400" /> জেলা (District)
                 </label>
                 <select
-                  disabled
                   value={selectedDistrict}
-                  className="bg-transparent text-xs font-bold text-slate-800 outline-none cursor-not-allowed"
+                  onChange={(e) => {
+                    setSelectedDistrict?.(e.target.value);
+                  }}
+                  className="bg-transparent text-xs font-bold text-slate-800 outline-none cursor-pointer"
+                  id="hero-district-select"
                 >
-                  <option value={selectedDistrict}>{selectedDistrict}</option>
+                  {renderedDistricts.map((dist) => (
+                    <option key={dist.id} value={dist.name}>
+                      {dist.name} {dist.nameEn ? `(${dist.nameEn})` : ''}
+                    </option>
+                  ))}
                 </select>
               </div>
 
@@ -155,7 +209,7 @@ export default function Hero({
                   <option value="">সকল হাসপাতাল/চেম্বার</option>
                   {renderedFacilities.map((fac) => (
                     <option key={fac.id} value={fac.name}>
-                      {fac.name.replace(', রাজশাহী', '')}
+                      {fac.name}
                     </option>
                   ))}
                 </select>
@@ -166,7 +220,7 @@ export default function Hero({
             <div className="mt-4 flex justify-end">
               <button
                 type="submit"
-                className="flex w-full sm:w-auto items-center justify-center gap-2 rounded-lg bg-[#0284C7] hover:bg-[#0274af] px-6 py-3 text-xs font-bold text-white transition cursor-pointer"
+                className="flex w-full sm:w-auto items-center justify-center gap-2 rounded-lg bg-[#0284C7] hover:bg-[#0274af] px-6 py-3 text-xs font-bold text-white transition cursor-pointer shadow-sm"
                 id="hero-submit-btn"
               >
                 <Search className="h-4 w-4" />
@@ -178,16 +232,19 @@ export default function Hero({
 
         {/* Popular Specialties Category Grid */}
         <div className="mt-12 md:mt-16">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-bold text-slate-800 md:text-xl">
-              জনপ্রিয় বিশেষজ্ঞ ক্যাটাগরি সমূহ
-            </h2>
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-lg font-bold text-slate-800 md:text-xl">
+                বিশেষজ্ঞ ক্যাটাগরি সমূহ
+              </h2>
+              <p className="text-xs text-slate-400 font-medium">আপনার কাঙ্ক্ষিত রোগ অনুযায়ী সঠিক বিশেষজ্ঞ নির্বাচন করুন</p>
+            </div>
             <button
               onClick={() => {
                 setSearchFilters({ district: selectedDistrict, specialty: '', facility: '' });
                 setActiveTab('doctors');
               }}
-              className="group flex items-center gap-1 text-xs font-bold text-[#0284C7] hover:underline"
+              className="group flex items-center gap-1 text-xs font-bold text-[#0284C7] hover:underline cursor-pointer"
               id="view-all-specialties-btn"
             >
               <span>সকল ডাক্তার দেখুন</span>
@@ -195,22 +252,22 @@ export default function Hero({
             </button>
           </div>
 
-          <div className="mt-4 grid grid-cols-2 gap-3.5 sm:grid-cols-3 lg:grid-cols-5">
-            {renderedSpecialties.slice(0, 5).map((spec) => (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+            {renderedSpecialties.map((spec) => (
               <div
                 key={spec.id}
                 onClick={() => handleCategoryClick(spec.name)}
-                className="group flex cursor-pointer flex-col items-center justify-center rounded-xl border border-slate-200 bg-white p-4.5 text-center transition hover:border-[#0284C7] hover:bg-slate-50/50"
+                className="group flex cursor-pointer flex-col items-center justify-center rounded-xl border border-slate-200 bg-white p-4 text-center transition hover:border-[#0284C7] hover:shadow-sm hover:bg-slate-50/50"
                 id={`category-card-${spec.id}`}
               >
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-50 border border-slate-100 transition group-hover:bg-sky-50">
+                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-50 border border-slate-100 transition group-hover:scale-105 group-hover:bg-sky-50">
                   {renderSpecialtyIcon(spec.icon)}
                 </div>
-                <h3 className="mt-3 font-bold text-slate-800 text-xs group-hover:text-[#0284C7] transition">
+                <h3 className="mt-2.5 font-bold text-slate-800 text-xs group-hover:text-[#0284C7] transition">
                   {spec.name}
                 </h3>
                 {spec.labelEn && (
-                  <p className="text-[10px] font-bold text-slate-400 mt-0.5">
+                  <p className="text-[10px] font-bold text-slate-400 mt-0.5 line-clamp-1">
                     {spec.labelEn}
                   </p>
                 )}
@@ -238,7 +295,7 @@ export default function Hero({
               </div>
               <h3 className="mt-3 text-xs font-bold text-slate-800">ডাক্তার খুঁজুন</h3>
               <p className="mt-1.5 text-[11px] text-slate-500 px-3 leading-relaxed font-semibold">
-                রাজশাহী জেলার স্বনামধন্য ডাক্তারদের চেম্বার শিডিউল এবং সরাসরি সিরিয়াল বুকিংয়ের আধুনিক প্ল্যাটফর্ম।
+                স্বনামধন্য ডাক্তারদের চেম্বার শিডিউল এবং সরাসরি সিরিয়াল বুকিংয়ের আধুনিক প্ল্যাটফর্ম।
               </p>
             </div>
 

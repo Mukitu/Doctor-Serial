@@ -13,7 +13,8 @@ import {
   Loader2,
   UserPlus,
   MapPin,
-  Building
+  Building,
+  Award
 } from 'lucide-react';
 import { Doctor, Appointment, Specialty, Facility, AdminProfile, District } from '../types';
 import { getAdmins, createAdminUser, updateAdminRole, revokeAdminAccess } from '../lib/supabase';
@@ -35,9 +36,12 @@ interface AdminDashboardProps {
   onAddFacility: (fac: Omit<Facility, 'id'>) => Promise<void>;
   onUpdateFacility: (fac: Facility) => Promise<void>;
   onDeleteFacility: (id: string) => Promise<void>;
+  onAddSpecialty: (spec: Omit<Specialty, 'id'>) => Promise<void>;
+  onUpdateSpecialty: (spec: Specialty) => Promise<void>;
+  onDeleteSpecialty: (id: string) => Promise<void>;
 }
 
-type AdminSubTab = 'appointments' | 'doctors' | 'admins' | 'districts' | 'facilities';
+type AdminSubTab = 'appointments' | 'doctors' | 'admins' | 'districts' | 'facilities' | 'specialties';
 
 export default function AdminDashboard({
   doctors,
@@ -56,6 +60,9 @@ export default function AdminDashboard({
   onAddFacility,
   onUpdateFacility,
   onDeleteFacility,
+  onAddSpecialty,
+  onUpdateSpecialty,
+  onDeleteSpecialty,
 }: AdminDashboardProps) {
   const [subTab, setSubTab] = useState<AdminSubTab>('appointments');
   const [editingDoctor, setEditingDoctor] = useState<Doctor | null>(null);
@@ -87,8 +94,18 @@ export default function AdminDashboard({
   const [facilityName, setFacilityName] = useState('');
   const [facilityAreaAddress, setFacilityAreaAddress] = useState('');
   const [facilityDistrictId, setFacilityDistrictId] = useState('');
+  const [facilityContactPhone, setFacilityContactPhone] = useState('');
   const [facilityIsVip, setFacilityIsVip] = useState(false);
   const [facilityIsActive, setFacilityIsActive] = useState(true);
+
+  // Specialties CRUD States
+  const [showAddSpecialtyModal, setShowAddSpecialtyModal] = useState(false);
+  const [editingSpecialty, setEditingSpecialty] = useState<Specialty | null>(null);
+  const [specialtyNameBn, setSpecialtyNameBn] = useState('');
+  const [specialtyNameEn, setSpecialtyNameEn] = useState('');
+  const [specialtyIconName, setSpecialtyIconName] = useState('Heart');
+  const [specialtyOrder, setSpecialtyOrder] = useState('0');
+  const [specialtyActive, setSpecialtyActive] = useState(true);
 
   // Set default district id on first load
   useEffect(() => {
@@ -149,7 +166,7 @@ export default function AdminDashboard({
           districtId: activeDistrictId,
           name: facilityName.trim(),
           areaAddress: facilityAreaAddress.trim(),
-          contactPhone: '', // no phone input allowed, as requested!
+          contactPhone: facilityContactPhone.trim(),
           isVip: facilityIsVip,
           isActive: facilityIsActive,
         });
@@ -159,7 +176,7 @@ export default function AdminDashboard({
           districtId: activeDistrictId,
           name: facilityName.trim(),
           areaAddress: facilityAreaAddress.trim(),
-          contactPhone: '', // no phone input allowed, as requested!
+          contactPhone: facilityContactPhone.trim(),
           isVip: facilityIsVip,
           isActive: facilityIsActive,
         });
@@ -169,6 +186,7 @@ export default function AdminDashboard({
       setEditingFacility(null);
       setFacilityName('');
       setFacilityAreaAddress('');
+      setFacilityContactPhone('');
       setFacilityIsVip(false);
       setFacilityIsActive(true);
       setTimeout(() => setSuccessMsg(''), 4000);
@@ -202,6 +220,62 @@ export default function AdminDashboard({
       try {
         await onDeleteFacility(id);
         setSuccessMsg('চেম্বার/ক্লিনিক সফলভাবে ডিলিট করা হয়েছে!');
+        setTimeout(() => setSuccessMsg(''), 4000);
+      } catch (err: any) {
+        alert(err.message || 'ডিলিট করতে ব্যর্থ হয়েছে।');
+      }
+    }
+  };
+
+  const handleSpecialtySubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!specialtyNameBn.trim() || !specialtyNameEn.trim()) {
+      alert('সবগুলো ফিল্ড সঠিকভাবে পূরণ করুন।');
+      return;
+    }
+    try {
+      if (editingSpecialty) {
+        await onUpdateSpecialty({
+          id: editingSpecialty.id,
+          nameBn: specialtyNameBn.trim(),
+          nameEn: specialtyNameEn.trim(),
+          iconName: specialtyIconName,
+          displayOrder: parseInt(specialtyOrder) || 0,
+          isActive: specialtyActive,
+        });
+        setSuccessMsg('विशेषজ্ঞতা সফলভাবে আপডেট করা হয়েছে!');
+      } else {
+        await onAddSpecialty({
+          nameBn: specialtyNameBn.trim(),
+          nameEn: specialtyNameEn.trim(),
+          iconName: specialtyIconName,
+          displayOrder: parseInt(specialtyOrder) || 0,
+          isActive: specialtyActive,
+        });
+        setSuccessMsg('নতুন বিশেষজ্ঞতা সফলভাবে যোগ করা হয়েছে!');
+      }
+      setShowAddSpecialtyModal(false);
+      setEditingSpecialty(null);
+      setSpecialtyNameBn('');
+      setSpecialtyNameEn('');
+      setSpecialtyIconName('Heart');
+      setSpecialtyOrder('0');
+      setSpecialtyActive(true);
+      setTimeout(() => setSuccessMsg(''), 4000);
+    } catch (err: any) {
+      alert(err.message || 'সংরক্ষণ ব্যর্থ হয়েছে।');
+    }
+  };
+
+  const handleSpecialtyDelete = async (id: string, name: string) => {
+    const hasDoctors = doctors.some((d) => d.specialty === name);
+    const msg = hasDoctors 
+      ? `সাবধান! এই ক্যাটাগরি (${name}) এর অধীনে তালিকাভুক্ত ডাক্তার রয়েছে। এটি ডিলিট করলে ঐ ডাক্তারদের ক্যাটাগরি নাম খালি দেখাবে। আপনি কি নিশ্চিতভাবে ডিলিট করতে চান?`
+      : `আপনি কি নিশ্চিতভাবে এই ক্যাটাগরি (${name}) ডিলিট করতে চান?`;
+    if (confirm(msg)) {
+      try {
+        await onDeleteSpecialty(id);
+        setSuccessMsg('ক্যাটাগরি সফলভাবে ডিলিট করা হয়েছে!');
         setTimeout(() => setSuccessMsg(''), 4000);
       } catch (err: any) {
         alert(err.message || 'ডিলিট করতে ব্যর্থ হয়েছে।');
@@ -298,6 +372,9 @@ export default function AdminDashboard({
   const [docFeesNew, setDocFeesNew] = useState('৮০০');
   const [docFeesOld, setDocFeesOld] = useState('৫০০');
   const [docPriority, setDocPriority] = useState('১০');
+  const [docRating, setDocRating] = useState('5.0');
+  const [docReviewCount, setDocReviewCount] = useState('0');
+  const [docPhotoUrl, setDocPhotoUrl] = useState('');
 
   const DAYS_LIST = ['শনিবার', 'রবিবার', 'সোমবার', 'মঙ্গলবার', 'বুধবার', 'বৃহস্পতিবার', 'শুক্রবার'];
 
@@ -310,7 +387,7 @@ export default function AdminDashboard({
   const handleEditClick = (doc: Doctor) => {
     setEditingDoctor(doc);
     setDocName(doc.name);
-    setDocBmdc(doc.bmdc);
+    setDocBmdc(doc.bmdc || '');
     setDocSpecialty(doc.specialty);
     setDocFacility(doc.facility);
     setDocDegrees(doc.degrees);
@@ -322,6 +399,9 @@ export default function AdminDashboard({
     setDocFeesNew(doc.feesNew.toString());
     setDocFeesOld(doc.feesOld.toString());
     setDocPriority(doc.priorityIndex.toString());
+    setDocRating((doc.rating || 5.0).toString());
+    setDocReviewCount((doc.reviewCount || 0).toString());
+    setDocPhotoUrl(doc.photoUrl || '');
     
     // Auto scroll to form
     const formElement = document.getElementById('doctor-form-section');
@@ -349,6 +429,9 @@ export default function AdminDashboard({
     setDocFeesNew('৮০০');
     setDocFeesOld('৫০০');
     setDocPriority('১০');
+    setDocRating('5.0');
+    setDocReviewCount('0');
+    setDocPhotoUrl('');
     setError('');
   };
 
@@ -373,7 +456,6 @@ export default function AdminDashboard({
 
     // Field validations
     if (!docName.trim()) return setError('ডাক্তারের নাম দেওয়া আবশ্যক।');
-    if (!docBmdc.trim()) return setError('BM&DC রেজিঃ নম্বর দেওয়া আবশ্যক।');
     if (!docDegrees.trim()) return setError('শিক্ষাগত যোগ্যতা দেওয়া আবশ্যক।');
     if (!docDesignation.trim()) return setError('পদবী দেওয়া আবশ্যক।');
     if (!docWorkplace.trim()) return setError('কর্মস্থল দেওয়া আবশ্যক।');
@@ -385,6 +467,12 @@ export default function AdminDashboard({
     const priorityNum = cleanNumberInput(docPriority);
 
     if (feesNewNum <= 0) return setError('নতুন রোগীর ফি সঠিকভাবে প্রদান করুন।');
+
+    const matchedSpecialty = specialties.find(s => s.nameBn === docSpecialty || s.nameEn === docSpecialty);
+    const matchedFacility = facilities.find(f => f.name === docFacility);
+
+    const specialtyId = matchedSpecialty?.id || specialties[0]?.id || '';
+    const facilityId = matchedFacility?.id || facilities[0]?.id || '';
 
     const doctorData: Doctor = {
       id: editingDoctor ? editingDoctor.id : `doc-${Date.now()}`,
@@ -401,6 +489,12 @@ export default function AdminDashboard({
       feesNew: feesNewNum,
       feesOld: feesOldNum,
       priorityIndex: priorityNum || 10,
+      rating: parseFloat(docRating) || 5.0,
+      reviewCount: parseInt(docReviewCount) || 0,
+      photoUrl: docPhotoUrl,
+      specialtyId: specialtyId,
+      facilityId: facilityId,
+      chamberId: editingDoctor?.chamberId
     };
 
     if (editingDoctor) {
@@ -465,7 +559,7 @@ export default function AdminDashboard({
           id="admin-subtab-appointments-btn"
         >
           <CalendarCheck className="h-4 w-4" />
-          <span>সিরিয়াল রিকোয়েস্ট বুকিং ({appointments.length})</span>
+          <span>সিরিয়াল রিকোয়েস্ট বুকিং (পেন্ডিং: {appointments.filter(a => a.status === 'Pending').length} / মোট: {appointments.length})</span>
         </button>
         <button
           onClick={() => setSubTab('doctors')}
@@ -516,6 +610,18 @@ export default function AdminDashboard({
         >
           <Building className="h-4 w-4 text-pink-600" />
           <span>চেম্বার ও ক্লিনিক ({facilities.length})</span>
+        </button>
+        <button
+          onClick={() => setSubTab('specialties')}
+          className={`flex items-center gap-2 border-b-2 px-5 py-2.5 text-xs font-bold transition cursor-pointer ${
+            subTab === 'specialties'
+              ? 'border-[#0284C7] text-[#0284C7]'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
+          }`}
+          id="admin-subtab-specialties-btn"
+        >
+          <Award className="h-4 w-4 text-purple-600" />
+          <span>স্পেশালিটি ও ক্যাটাগরি ({specialties.length})</span>
         </button>
       </div>
 
@@ -694,11 +800,10 @@ export default function AdminDashboard({
                 <div className="grid grid-cols-2 gap-3">
                   {/* BM&DC Reg */}
                   <div className="flex flex-col gap-1">
-                    <label className="text-[11px] font-bold text-slate-500">BM&DC রেজিঃ *</label>
+                    <label className="text-[11px] font-bold text-slate-500">BM&DC রেজিঃ (ঐচ্ছিক)</label>
                     <input
                       type="text"
-                      required
-                      placeholder="A-54321"
+                      placeholder="যেমন: A-54321"
                       value={docBmdc}
                       onChange={(e) => setDocBmdc(e.target.value)}
                       className="w-full rounded-lg border border-slate-200 py-2 px-3 text-xs font-bold text-slate-800 bg-white focus:outline-none focus:border-[#0284C7]"
@@ -873,6 +978,54 @@ export default function AdminDashboard({
                   </div>
                 </div>
 
+                <div className="grid grid-cols-2 gap-3">
+                  {/* Rating Selector */}
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[11px] font-bold text-slate-500">কাস্টম রেটিং</label>
+                    <select
+                      value={docRating}
+                      onChange={(e) => setDocRating(e.target.value)}
+                      className="w-full rounded-lg border border-slate-200 py-2 px-2.5 text-xs font-bold text-slate-800 bg-white focus:outline-none focus:border-[#0284C7]"
+                    >
+                      <option value="5.0">5.0 ★ (Default)</option>
+                      <option value="4.9">4.9 ★</option>
+                      <option value="4.8">4.8 ★</option>
+                      <option value="4.7">4.7 ★</option>
+                      <option value="4.6">4.6 ★</option>
+                      <option value="4.5">4.5 ★</option>
+                      <option value="4.4">4.4 ★</option>
+                      <option value="4.3">4.3 ★</option>
+                      <option value="4.2">4.2 ★</option>
+                      <option value="4.0">4.0 ★</option>
+                    </select>
+                  </div>
+
+                  {/* Review Count Input */}
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[11px] font-bold text-slate-500">রিভিউ সংখ্যা</label>
+                    <input
+                      type="number"
+                      min="0"
+                      placeholder="যেমন: 45"
+                      value={docReviewCount}
+                      onChange={(e) => setDocReviewCount(e.target.value)}
+                      className="w-full rounded-lg border border-slate-200 py-2 px-3 text-xs font-bold text-slate-800 bg-white focus:outline-none focus:border-[#0284C7]"
+                    />
+                  </div>
+                </div>
+
+                {/* Photo URL Input */}
+                <div className="flex flex-col gap-1">
+                  <label className="text-[11px] font-bold text-slate-500">ডাক্তারের ছবি URL (Photo URL)</label>
+                  <input
+                    type="text"
+                    placeholder="https://example.com/photo.jpg"
+                    value={docPhotoUrl}
+                    onChange={(e) => setDocPhotoUrl(e.target.value)}
+                    className="w-full rounded-lg border border-slate-200 py-2 px-3 text-xs font-bold text-slate-800 bg-white focus:outline-none focus:border-[#0284C7]"
+                  />
+                </div>
+
                 {/* Form Buttons */}
                 <div className="pt-2 flex items-center justify-end gap-2">
                   {editingDoctor && (
@@ -921,10 +1074,17 @@ export default function AdminDashboard({
                         <td className="p-3">
                           <p className="font-bold text-slate-800">{doc.name}</p>
                           <p className="text-[10px] text-slate-400 mt-0.5 line-clamp-1 font-bold">{doc.degrees}</p>
+                          <div className="flex items-center gap-1.5 mt-1 text-[10px] font-bold text-amber-500 bg-amber-50/50 border border-amber-100/30 rounded px-1.5 py-0.5 w-max">
+                            <span>★ {doc.rating || '5.0'}</span>
+                            <span className="text-slate-400">|</span>
+                            <span className="text-slate-500">{doc.reviewCount || 0} রিভিউ</span>
+                          </div>
                         </td>
 
                         {/* BM&DC ID */}
-                        <td className="p-3 font-mono text-slate-600 font-bold">{doc.bmdc}</td>
+                        <td className="p-3 font-mono text-slate-600 font-bold">
+                          {doc.bmdc ? doc.bmdc : <span className="text-slate-400 font-sans font-bold text-[10px]">প্রদান করা হয়নি</span>}
+                        </td>
 
                         {/* Specialty */}
                         <td className="p-3">
@@ -1298,10 +1458,13 @@ export default function AdminDashboard({
                 {facilities.map((fac) => (
                   <tr key={fac.id} className="hover:bg-slate-50/50">
                     <td className="p-3 text-slate-900 text-xs">
-                      <span className="flex items-center gap-1.5">
+                      <span className="flex items-center gap-1.5 font-bold">
                         <Building className="h-3.5 w-3.5 text-slate-400 shrink-0" />
                         <span>{fac.name}</span>
                       </span>
+                      {fac.contactPhone && (
+                        <p className="text-[10px] text-slate-500 font-semibold mt-1 ml-5">ফোন: {fac.contactPhone}</p>
+                      )}
                     </td>
                     <td className="p-3 text-xs">
                       <span className="inline-flex rounded bg-sky-50 px-1.5 py-0.5 text-[10px] text-[#0284C7] border border-sky-100">
@@ -1335,6 +1498,7 @@ export default function AdminDashboard({
                             setFacilityName(fac.name);
                             setFacilityAreaAddress(fac.areaAddress);
                             setFacilityDistrictId(fac.districtId);
+                            setFacilityContactPhone(fac.contactPhone || '');
                             setFacilityIsVip(fac.isVip);
                             setFacilityIsActive(fac.isActive);
                             setShowAddFacilityModal(true);
@@ -1346,6 +1510,96 @@ export default function AdminDashboard({
                         </button>
                         <button
                           onClick={() => handleFacilityDelete(fac.id, fac.name)}
+                          className="inline-flex items-center gap-1 rounded bg-red-50 border border-red-100 text-[10px] text-red-600 hover:bg-red-100 py-1 px-2 cursor-pointer"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                          <span>মুছুন</span>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {subTab === 'specialties' && (
+        <div className="space-y-4 animate-in fade-in duration-150">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-sm font-bold text-slate-800">বিশেষজ্ঞতা ও ক্যাটাগরি সমূহ</h2>
+              <p className="text-[10px] text-slate-400 mt-0.5 font-bold">ডাক্তার তালিকাভুক্তির জন্য ক্যাটাগরি ও আইকন কাস্টমাইজেশন</p>
+            </div>
+            <button
+              onClick={() => {
+                setEditingSpecialty(null);
+                setSpecialtyNameBn('');
+                setSpecialtyNameEn('');
+                setSpecialtyIconName('Heart');
+                setSpecialtyOrder('0');
+                setSpecialtyActive(true);
+                setShowAddSpecialtyModal(true);
+              }}
+              className="flex items-center gap-1.5 rounded-lg bg-[#0284C7] hover:bg-[#0274af] px-3.5 py-2 text-xs font-bold text-white transition cursor-pointer"
+            >
+              <PlusCircle className="h-3.5 w-3.5" />
+              <span>নতুন ক্যাটাগরি যোগ করুন</span>
+            </button>
+          </div>
+
+          <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200">
+                  <th className="p-3 text-[11px]">ক্যাটাগরি (বাংলা)</th>
+                  <th className="p-3 text-[11px]">ক্যাটাগরি (ইংরেজি)</th>
+                  <th className="p-3 text-[11px]">আইকন কোড (Icon)</th>
+                  <th className="p-3 text-[11px]">প্রদর্শন ক্রম</th>
+                  <th className="p-3 text-[11px]">স্ট্যাটাস</th>
+                  <th className="p-3 text-center text-[11px]">অ্যাকশন</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 font-bold text-slate-700">
+                {specialties.map((spec) => (
+                  <tr key={spec.id} className="hover:bg-slate-50/50">
+                    <td className="p-3 text-slate-900 text-xs">{spec.nameBn}</td>
+                    <td className="p-3 text-slate-500 text-xs">{spec.nameEn}</td>
+                    <td className="p-3 text-xs">
+                      <span className="inline-flex items-center gap-1.5 rounded bg-purple-50 px-2 py-0.5 text-purple-700 border border-purple-100">
+                        {spec.iconName || 'Heart'}
+                      </span>
+                    </td>
+                    <td className="p-3 text-slate-500 text-xs">{spec.displayOrder || 0}</td>
+                    <td className="p-3">
+                      <span className={`inline-flex rounded-full px-2 py-0.5 text-[9px] ${
+                        spec.isActive
+                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                          : 'bg-slate-100 text-slate-400 border border-slate-200'
+                      }`}>
+                        {spec.isActive ? 'সক্রিয়' : 'নিষ্ক্রিয়'}
+                      </span>
+                    </td>
+                    <td className="p-3">
+                      <div className="flex items-center justify-center gap-2">
+                        <button
+                          onClick={() => {
+                            setEditingSpecialty(spec);
+                            setSpecialtyNameBn(spec.nameBn);
+                            setSpecialtyNameEn(spec.nameEn);
+                            setSpecialtyIconName(spec.iconName || 'Heart');
+                            setSpecialtyOrder((spec.displayOrder || 0).toString());
+                            setSpecialtyActive(spec.isActive);
+                            setShowAddSpecialtyModal(true);
+                          }}
+                          className="inline-flex items-center gap-1 rounded bg-slate-50 border border-slate-200 text-[10px] text-slate-600 hover:border-slate-400 py-1 px-2 cursor-pointer"
+                        >
+                          <Edit2 className="h-3 w-3" />
+                          <span>সম্পাদনা</span>
+                        </button>
+                        <button
+                          onClick={() => handleSpecialtyDelete(spec.id, spec.nameBn)}
                           className="inline-flex items-center gap-1 rounded bg-red-50 border border-red-100 text-[10px] text-red-600 hover:bg-red-100 py-1 px-2 cursor-pointer"
                         >
                           <Trash2 className="h-3 w-3" />
@@ -1512,6 +1766,17 @@ export default function AdminDashboard({
                 />
               </div>
 
+              <div>
+                <label className="block text-slate-500 mb-1 font-bold">যোগাযোগের মোবাইল নম্বর (Contact Phone)</label>
+                <input
+                  type="text"
+                  value={facilityContactPhone}
+                  onChange={(e) => setFacilityContactPhone(e.target.value)}
+                  className="w-full rounded-lg border border-slate-200 bg-slate-50/50 py-2 px-3 text-xs font-bold text-slate-800 outline-none focus:border-[#0284C7] focus:bg-white"
+                  placeholder="যেমন: 01712345678"
+                />
+              </div>
+
               <div className="flex items-center gap-4 py-1">
                 <div className="flex items-center gap-1.5">
                   <input
@@ -1546,6 +1811,109 @@ export default function AdminDashboard({
                   onClick={() => {
                     setShowAddFacilityModal(false);
                     setEditingFacility(null);
+                  }}
+                  className="rounded-lg border border-slate-200 px-4 py-2 text-slate-600 hover:bg-slate-50 transition cursor-pointer"
+                >
+                  বাতিল
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-lg bg-[#0284C7] hover:bg-[#0274af] px-4 py-2 text-white font-bold transition cursor-pointer"
+                >
+                  <span>সংরক্ষণ করুন</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showAddSpecialtyModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 animate-in fade-in duration-100">
+          <div className="w-full max-w-md bg-white rounded-xl border border-slate-200 shadow-xl overflow-hidden animate-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4 bg-slate-50/50">
+              <h3 className="font-extrabold text-slate-800 text-sm">
+                {editingSpecialty ? 'ক্যাটাগরি তথ্য সংশোধন' : 'নতুন ক্যাটাগরি সংযোজন'}
+              </h3>
+              <button
+                onClick={() => {
+                  setShowAddSpecialtyModal(false);
+                  setEditingSpecialty(null);
+                }}
+                className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700 cursor-pointer"
+              >
+                <X className="h-4.5 w-4.5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSpecialtySubmit} className="p-6 space-y-4 text-xs font-semibold">
+              <div>
+                <label className="block text-[#0284C7] mb-1 font-bold">ক্যাটাগরি নাম (বাংলা)</label>
+                <input
+                  type="text"
+                  required
+                  value={specialtyNameBn}
+                  onChange={(e) => setSpecialtyNameBn(e.target.value)}
+                  className="w-full rounded-lg border border-slate-200 bg-slate-50/50 py-2 px-3 text-xs font-bold text-slate-800 outline-none focus:border-[#0284C7] focus:bg-white"
+                  placeholder="যেমন: মেডিসিন"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-500 mb-1 font-bold">Category Name (English)</label>
+                <input
+                  type="text"
+                  required
+                  value={specialtyNameEn}
+                  onChange={(e) => setSpecialtyNameEn(e.target.value)}
+                  className="w-full rounded-lg border border-slate-200 bg-slate-50/50 py-2 px-3 text-xs font-bold text-slate-800 outline-none focus:border-[#0284C7] focus:bg-white"
+                  placeholder="যেমন: Medicine"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-500 mb-1 font-bold">আইকন কোড (যেমন: Heart, Brain, Eye)</label>
+                <input
+                  type="text"
+                  required
+                  value={specialtyIconName}
+                  onChange={(e) => setSpecialtyIconName(e.target.value)}
+                  className="w-full rounded-lg border border-slate-200 bg-slate-50/50 py-2 px-3 text-xs font-bold text-slate-800 outline-none focus:border-[#0284C7] focus:bg-white"
+                  placeholder="Heart"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-500 mb-1 font-bold">প্রদর্শন ক্রম (Display Order)</label>
+                <input
+                  type="number"
+                  required
+                  value={specialtyOrder}
+                  onChange={(e) => setSpecialtyOrder(e.target.value)}
+                  className="w-full rounded-lg border border-slate-200 bg-slate-50/50 py-2 px-3 text-xs font-bold text-slate-800 outline-none focus:border-[#0284C7] focus:bg-white"
+                  placeholder="0"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 py-1">
+                <input
+                  type="checkbox"
+                  id="specialty-active"
+                  checked={specialtyActive}
+                  onChange={(e) => setSpecialtyActive(e.target.checked)}
+                  className="rounded border-slate-300 text-[#0284C7] focus:ring-[#0284C7]"
+                />
+                <label htmlFor="specialty-active" className="text-slate-700 font-bold cursor-pointer">
+                  সক্রিয় ক্যাটাগরি (Active)?
+                </label>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAddSpecialtyModal(false);
+                    setEditingSpecialty(null);
                   }}
                   className="rounded-lg border border-slate-200 px-4 py-2 text-slate-600 hover:bg-slate-50 transition cursor-pointer"
                 >

@@ -22,6 +22,7 @@ interface DoctorDirectoryProps {
   initialFilters: { district: string; specialty: string; facility: string };
   resetInitialFilters: () => void;
   selectedDistrict: string;
+  setSelectedDistrict?: (district: string) => void;
 }
 
 export default function DoctorDirectory({
@@ -33,6 +34,7 @@ export default function DoctorDirectory({
   initialFilters,
   resetInitialFilters,
   selectedDistrict,
+  setSelectedDistrict,
 }: DoctorDirectoryProps) {
   // Filter States
   const [searchTerm, setSearchTerm] = useState('');
@@ -70,40 +72,57 @@ export default function DoctorDirectory({
   // Filter Logic matching the flattened relational database mapping
   const filteredDoctors = useMemo(() => {
     return doctors.filter(doc => {
-      // 1. Keyword search (by name, degrees, bmdc)
+      // 1. Keyword search (by name, degrees, bmdc, workplace)
+      const term = searchTerm.toLowerCase().trim();
       const matchesSearch = 
-        searchTerm === '' ||
-        doc.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        doc.degrees.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        doc.bmdc.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        doc.workplace.toLowerCase().includes(searchTerm.toLowerCase());
+        term === '' ||
+        (doc.name || '').toLowerCase().includes(term) ||
+        (doc.degrees || '').toLowerCase().includes(term) ||
+        (doc.bmdc || '').toLowerCase().includes(term) ||
+        (doc.workplace || '').toLowerCase().includes(term) ||
+        (doc.specialty || '').toLowerCase().includes(term);
 
       // 2. Specialty Filter
-      const specObj = specialties.find(s => s.id === doc.specialtyId || s.nameBn === selectedSpecialty);
-      const matchesSpecialty = 
-        selectedSpecialty === '' || 
-        doc.specialtyId === selectedSpecialty || 
-        (specObj && (specObj.nameBn === selectedSpecialty || specObj.id === doc.specialtyId));
+      let matchesSpecialty = true;
+      if (selectedSpecialty && selectedSpecialty !== '') {
+        const specMatch = specialties.find(
+          s => s.nameBn === selectedSpecialty || s.id === selectedSpecialty || s.nameEn?.toLowerCase() === selectedSpecialty.toLowerCase()
+        );
+        matchesSpecialty = 
+          doc.specialty === selectedSpecialty ||
+          doc.specialtyNameBn === selectedSpecialty ||
+          doc.specialtyId === selectedSpecialty ||
+          (specMatch ? (doc.specialtyId === specMatch.id || doc.specialty === specMatch.nameBn || doc.specialtyNameBn === specMatch.nameBn) : false);
+      }
 
       // 3. Chamber Facility Filter
-      const matchesFacility = 
-        selectedFacility === '' || 
-        doc.facilityName === selectedFacility || 
-        doc.facilityId === selectedFacility;
+      let matchesFacility = true;
+      if (selectedFacility && selectedFacility !== '') {
+        matchesFacility = 
+          doc.facilityName === selectedFacility || 
+          doc.facilityId === selectedFacility ||
+          doc.facility === selectedFacility;
+      }
 
       // 4. District Filter
-      const currentDistrictObj = districts.find(d => d.nameBn === selectedDistrict);
-      const matchesDistrict = 
-        !currentDistrictObj || 
-        doc.facilityDistrictId === currentDistrictObj.id;
+      let matchesDistrict = true;
+      if (selectedDistrict && selectedDistrict !== 'সকল জেলা' && selectedDistrict !== 'all') {
+        const currentDistrictObj = districts.find(
+          d => d.nameBn === selectedDistrict || d.id === selectedDistrict || d.nameEn?.toLowerCase() === selectedDistrict.toLowerCase()
+        );
+        matchesDistrict = 
+          !doc.facilityDistrictId ||
+          doc.facilityDistrictId === '' ||
+          (currentDistrictObj ? (doc.facilityDistrictId === currentDistrictObj.id || doc.facilityDistrictId === currentDistrictObj.nameBn) : true);
+      }
 
       // 5. Visiting Days Filter
       const matchesDays = 
         selectedDays.length === 0 || 
-        selectedDays.some(day => doc.visitingDays.includes(day));
+        selectedDays.some(day => (doc.visitingDays || []).includes(day));
 
       return matchesSearch && matchesSpecialty && matchesFacility && matchesDistrict && matchesDays;
-    }).sort((a, b) => a.priorityIndex - b.priorityIndex);
+    }).sort((a, b) => (a.priorityIndex || 0) - (b.priorityIndex || 0));
   }, [doctors, specialties, districts, selectedDistrict, searchTerm, selectedSpecialty, selectedFacility, selectedDays]);
 
   return (
@@ -114,7 +133,7 @@ export default function DoctorDirectory({
             ● ফিল্টারিং প্যানেল
           </span>
           <h1 className="text-xl font-extrabold text-slate-800 md:text-2xl mt-1.5">
-            ডাক্তার ডিরেক্টরি ({selectedDistrict})
+            ডাক্তার ডিরেক্টরি {selectedDistrict ? `(${selectedDistrict})` : ''}
           </h1>
           <p className="text-slate-400 font-bold text-xs mt-0.5">
             ভেরিফাইড বিশেষজ্ঞ ডাক্তারদের তালিকা এবং সময়সূচী খুজে নিন।
@@ -137,15 +156,38 @@ export default function DoctorDirectory({
       <div className="grid gap-8 lg:grid-cols-4">
         {/* Left column: Sidebar Filters */}
         <aside className="lg:col-span-1">
-          <div className="sticky top-24 rounded-xl border border-slate-200 bg-white p-4.5 shadow-sm">
-            <div className="flex items-center gap-2 border-b border-slate-100 pb-3.5 mb-3.5">
+          <div className="sticky top-24 rounded-xl border border-slate-200 bg-white p-4.5 shadow-sm space-y-4">
+            <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
               <SlidersHorizontal className="h-4.5 w-4.5 text-[#0284C7]" />
               <h2 className="text-sm font-bold text-slate-800">সার্চ ফিল্টারসমূহ</h2>
             </div>
 
+            {/* District Selector in Sidebar */}
+            {districts && districts.length > 0 && (
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                  জেলা (District)
+                </label>
+                <div className="relative">
+                  <select
+                    value={selectedDistrict}
+                    onChange={(e) => setSelectedDistrict?.(e.target.value)}
+                    className="w-full rounded-lg border border-slate-200 py-2 pl-3 pr-8 text-xs font-bold text-slate-800 focus:border-[#0284C7] focus:outline-none bg-white"
+                    id="sidebar-district-select"
+                  >
+                    {districts.filter(d => d.isActive !== false).map((dist) => (
+                      <option key={dist.id} value={dist.nameBn}>
+                        {dist.nameBn} {dist.nameEn ? `(${dist.nameEn})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            )}
+
             {/* Keyword Search */}
-            <div className="mb-5">
-              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">
+            <div>
+              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
                 ডাক্তারের নাম বা BM&DC রেজিঃ
               </label>
               <div className="relative">
@@ -162,14 +204,14 @@ export default function DoctorDirectory({
             </div>
 
             {/* Specialty Select Radio Buttons */}
-            <div className="mb-5">
-              <label className="block text-[10px] font-bold text-[#0284C7] uppercase tracking-wider mb-2">
+            <div>
+              <label className="block text-[10px] font-bold text-[#0284C7] uppercase tracking-wider mb-1.5">
                 বিশেষজ্ঞ বিভাগ (Specialty)
               </label>
               <div className="flex flex-col gap-1 max-h-56 overflow-y-auto pr-1">
                 <button
                   onClick={() => setSelectedSpecialty('')}
-                  className={`flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-xs font-bold transition ${
+                  className={`flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-xs font-bold transition cursor-pointer ${
                     selectedSpecialty === ''
                       ? 'bg-slate-100 text-slate-900 border border-slate-200/40 font-bold'
                       : 'text-slate-600 hover:bg-slate-50'
@@ -179,20 +221,24 @@ export default function DoctorDirectory({
                   <span>সকল বিশেষজ্ঞ</span>
                   <span className="text-[10px] opacity-70">({doctors.length})</span>
                 </button>
-                {specialties.map((spec) => {
-                  const count = doctors.filter(d => d.specialtyId === spec.id).length;
+                {specialties.filter(s => s.isActive !== false).map((spec) => {
+                  const count = doctors.filter(d => 
+                    d.specialtyId === spec.id || 
+                    d.specialty === spec.nameBn || 
+                    d.specialtyNameBn === spec.nameBn
+                  ).length;
                   return (
                     <button
                       key={spec.id}
                       onClick={() => setSelectedSpecialty(spec.nameBn)}
-                      className={`flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-xs font-bold transition ${
+                      className={`flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-xs font-bold transition cursor-pointer ${
                         selectedSpecialty === spec.nameBn
                           ? 'bg-slate-100 text-slate-900 border border-slate-200/40 font-bold'
                           : 'text-slate-600 hover:bg-slate-50'
                       }`}
                       id={`specialty-filter-${spec.id}`}
                     >
-                      <span>{spec.nameBn}</span>
+                      <span className="line-clamp-1">{spec.nameBn}</span>
                       <span className="text-[10px] opacity-70">({count})</span>
                     </button>
                   );
@@ -201,8 +247,8 @@ export default function DoctorDirectory({
             </div>
 
             {/* Facility Filter */}
-            <div className="mb-5">
-              <label className="block text-[10px] font-bold text-[#0D9488] uppercase tracking-wider mb-2">
+            <div>
+              <label className="block text-[10px] font-bold text-[#0D9488] uppercase tracking-wider mb-1.5">
                 হাসপাতাল / চেম্বার
               </label>
               <select
@@ -221,8 +267,8 @@ export default function DoctorDirectory({
             </div>
 
             {/* Visiting Days Filter */}
-            <div className="mb-2">
-              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">
+            <div>
+              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
                 রোগী দেখার দিন
               </label>
               <div className="grid grid-cols-2 gap-2">
@@ -238,7 +284,6 @@ export default function DoctorDirectory({
                           ? 'border-emerald-200 bg-emerald-50/50 text-emerald-700'
                           : 'border-slate-200 bg-slate-50/75 text-slate-600 hover:bg-slate-100/70'
                       }`}
-                      id={`day-filter-${day}`}
                     >
                       {day}
                     </button>

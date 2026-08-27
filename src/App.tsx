@@ -29,7 +29,10 @@ import {
   deleteDistrict,
   addFacility,
   updateFacility,
-  deleteFacility
+  deleteFacility,
+  addSpecialty,
+  updateSpecialty,
+  deleteSpecialty
 } from './lib/supabase';
 
 export default function App() {
@@ -57,32 +60,42 @@ export default function App() {
     facility: '',
   });
 
-  // Async load all tables dynamically from the service layer
+  // Unified data-loading sequence that forces a re-render once all tables have successfully populated
   useEffect(() => {
+    let isMounted = true;
     async function loadInitialData() {
       setIsLoading(true);
       try {
-        const dbDistricts = await getDistricts();
-        setDistricts(dbDistricts);
+        const [dbDistricts, dbSpecialties, dbFacilities, dbDocs, dbApps] = await Promise.all([
+          getDistricts(),
+          getSpecialties(),
+          getFacilities(),
+          getDoctors(),
+          getAppointments()
+        ]);
 
-        const dbSpecialties = await getSpecialties();
-        setSpecialties(dbSpecialties);
-
-        const dbFacilities = await getFacilities();
-        setFacilities(dbFacilities);
-
-        const dbDocs = await getDoctors();
-        setDoctors(dbDocs);
-
-        const dbApps = await getAppointments();
-        setAppointments(dbApps);
+        if (isMounted) {
+          // Batch atomic updates to avoid partial rendering or empty view states
+          setDistricts(dbDistricts || []);
+          setSpecialties(dbSpecialties || []);
+          setFacilities(dbFacilities || []);
+          setDoctors(dbDocs || []);
+          setAppointments(dbApps || []);
+        }
       } catch (err) {
-        console.error('Error loading data in App:', err);
+        console.error('Error loading initial data in App:', err);
       } finally {
-        setIsLoading(false);
+        if (isMounted) {
+          setIsLoading(false);
+        }
       }
     }
+
     loadInitialData();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   // Load session admin on mount
@@ -258,6 +271,36 @@ export default function App() {
     }
   };
 
+  const handleAddSpecialty = async (newSpec: Omit<Specialty, 'id'>) => {
+    try {
+      await addSpecialty(newSpec);
+      const refreshed = await getSpecialties();
+      setSpecialties(refreshed);
+    } catch (err) {
+      console.error('Failed to add specialty:', err);
+    }
+  };
+
+  const handleUpdateSpecialty = async (updatedSpec: Specialty) => {
+    try {
+      await updateSpecialty(updatedSpec);
+      const refreshed = await getSpecialties();
+      setSpecialties(refreshed);
+    } catch (err) {
+      console.error('Failed to update specialty:', err);
+    }
+  };
+
+  const handleDeleteSpecialty = async (id: string) => {
+    try {
+      await deleteSpecialty(id);
+      const refreshed = await getSpecialties();
+      setSpecialties(refreshed);
+    } catch (err) {
+      console.error('Failed to delete specialty:', err);
+    }
+  };
+
   const handleAddFacility = async (newFac: Omit<Facility, 'id'>) => {
     try {
       await addFacility(newFac);
@@ -353,6 +396,7 @@ export default function App() {
               setActiveTab={handleTabChange}
               setSearchFilters={setSearchFilters}
               selectedDistrict={selectedDistrict}
+              setSelectedDistrict={setSelectedDistrict}
               districts={districts}
               specialties={specialties}
               facilities={facilities}
@@ -483,6 +527,7 @@ export default function App() {
             initialFilters={searchFilters}
             resetInitialFilters={resetSearchFilters}
             selectedDistrict={selectedDistrict}
+            setSelectedDistrict={setSelectedDistrict}
           />
         )}
 
@@ -517,6 +562,9 @@ export default function App() {
             onAddFacility={handleAddFacility}
             onUpdateFacility={handleUpdateFacility}
             onDeleteFacility={handleDeleteFacility}
+            onAddSpecialty={handleAddSpecialty}
+            onUpdateSpecialty={handleUpdateSpecialty}
+            onDeleteSpecialty={handleDeleteSpecialty}
           />
         )}
       </main>
@@ -565,11 +613,6 @@ export default function App() {
                 <li>
                   <button onClick={() => handleTabChange('track')} className="hover:text-[#0284C7] transition cursor-pointer">সিরিয়াল ট্র্যাকার</button>
                 </li>
-                {currentAdmin && (
-                  <li>
-                    <button onClick={() => handleTabChange('admin')} className="hover:text-[#0284C7] transition cursor-pointer">অ্যাডমিন ড্যাশবোর্ড</button>
-                  </li>
-                )}
               </ul>
             </div>
 

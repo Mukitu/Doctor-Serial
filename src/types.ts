@@ -53,6 +53,8 @@ export interface Doctor {
   facilityAddress?: string;
   facilityDistrictId?: string;
   chamberRoomNo?: string;
+  rating?: number;
+  reviewCount?: number;
 }
 
 export interface Appointment {

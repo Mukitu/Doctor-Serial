@@ -24,20 +24,13 @@ export default function Header({
 }: HeaderProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  // Fallback to static district mapping if dynamic districts list is empty, filtered for Rajshahi only in public UI
-  const allDistrictsMapped = districts.length > 0 
-    ? districts.map(d => ({ id: d.id, name: d.nameBn, nameEn: d.nameEn }))
+  // Map dynamic districts from Supabase
+  const renderedDistricts = (districts && districts.length > 0)
+    ? districts
+        .filter(d => d.isActive !== false)
+        .sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0))
+        .map(d => ({ id: d.id, name: d.nameBn, nameEn: d.nameEn }))
     : DISTRICTS;
-
-  const renderedDistricts = allDistrictsMapped.filter(d => 
-    d.id === 'rajshahi' || 
-    d.name === 'রাজশাহী' || 
-    d.nameEn?.toLowerCase() === 'rajshahi'
-  );
-
-  if (renderedDistricts.length === 0) {
-    renderedDistricts.push({ id: 'rajshahi', name: 'রাজশাহী', nameEn: 'Rajshahi' });
-  }
 
   return (
     <header className="sticky top-0 z-40 w-full border-b border-slate-200 bg-white/95 backdrop-blur-md">
