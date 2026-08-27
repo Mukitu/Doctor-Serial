@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Header from './components/Header';
 import Hero from './components/Hero';
 import DoctorDirectory from './components/DoctorDirectory';
@@ -7,7 +7,8 @@ import AppointmentTracker from './components/AppointmentTracker';
 import AdminDashboard from './components/AdminDashboard';
 import PortalLogin from './components/PortalLogin';
 import { Doctor, Appointment, ActiveTab, District, Specialty, Facility, AdminProfile } from './types';
-import { HeartPulse, ShieldCheck, PhoneCall, HelpCircle, ChevronRight } from 'lucide-react';
+import { filterDoctorsList } from './utils/filterDoctors';
+import { HeartPulse, ShieldCheck, PhoneCall, HelpCircle, ChevronRight, Filter, X, Sparkles } from 'lucide-react';
 import {
   isSupabaseConfigured,
   getDistricts,
@@ -37,7 +38,7 @@ import {
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('home');
-  const [selectedDistrict, setSelectedDistrict] = useState('রাজশাহী');
+  const [selectedDistrict, setSelectedDistrict] = useState('সকল জেলা');
   const [bookingDoctor, setBookingDoctor] = useState<Doctor | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [currentAdmin, setCurrentAdmin] = useState<AdminProfile | null>(null);
@@ -55,10 +56,24 @@ export default function App() {
     specialty: string;
     facility: string;
   }>({
-    district: 'রাজশাহী',
+    district: 'সকল জেলা',
     specialty: '',
     facility: '',
   });
+
+  // Real-time reactive filtered doctors for the Home page "আমাদের সেরা বিশেষজ্ঞরা" section
+  const homeFilteredDoctors = useMemo(() => {
+    return filterDoctorsList(
+      doctors,
+      {
+        selectedDistrict: selectedDistrict,
+        selectedSpecialty: searchFilters.specialty,
+        selectedFacility: searchFilters.facility,
+      },
+      specialties,
+      districts
+    ).sort((a, b) => (a.priorityIndex || 0) - (b.priorityIndex || 0));
+  }, [doctors, selectedDistrict, searchFilters.specialty, searchFilters.facility, specialties, districts]);
 
   // Unified data-loading sequence that forces a re-render once all tables have successfully populated
   useEffect(() => {
@@ -343,21 +358,34 @@ export default function App() {
     }
   };
 
-  const handleUpdateAppointmentStatus = async (id: string, status: Appointment['status']) => {
+  const handleUpdateAppointmentStatus = async (
+    id: string,
+    status: Appointment['status'],
+    details?: {
+      serialNo?: string;
+      assignedRoomNo?: string;
+      assignedFloor?: string;
+      assignedBuilding?: string;
+      confirmedVisitingTime?: string;
+      adminNotes?: string;
+    }
+  ) => {
     try {
       if (status === 'Confirmed') {
-        // Quick confirm uses generated/standard details
+        const existing = appointments.find((a) => a.id === id);
         await confirmAppointment({
           bookingCode: id,
-          serialNo: `SL-${Math.floor(10 + Math.random() * 90)}`,
-          assignedRoomNo: `কক্ষ ১০${Math.floor(1 + Math.random() * 8)}`,
-          confirmedVisitingTime: 'বিকাল ৫:৩০ টা',
-          adminNotes: 'অটো-অনুমোদিত'
+          serialNo: details?.serialNo || existing?.serialNo || '০১',
+          assignedRoomNo: details?.assignedRoomNo || existing?.assignedRoomNo || '',
+          assignedFloor: details?.assignedFloor || existing?.assignedFloor || '',
+          assignedBuilding: details?.assignedBuilding || existing?.assignedBuilding || '',
+          confirmedVisitingTime: details?.confirmedVisitingTime || existing?.confirmedVisitingTime || '',
+          adminNotes: details?.adminNotes !== undefined ? details.adminNotes : existing?.adminNotes
         });
       } else if (status === 'Cancelled' || status === 'Rejected') {
         await rejectAppointment({
           bookingCode: id,
-          rejectionReason: 'রোগীর অনুরোধে বাতিল'
+          rejectionReason: 'বাতিল করা হয়েছে'
         });
       } else {
         await resetAppointmentToPending(id);
@@ -369,7 +397,18 @@ export default function App() {
       console.error('Error updating appointment status:', err);
       // Local fallback
       setAppointments((prev) =>
-        prev.map((app) => (app.id === id ? { ...app, status } : app))
+        prev.map((app) => (app.id === id ? { 
+          ...app, 
+          status,
+          ...(details ? {
+            serialNo: details.serialNo ?? app.serialNo,
+            assignedRoomNo: details.assignedRoomNo ?? app.assignedRoomNo,
+            assignedFloor: details.assignedFloor ?? app.assignedFloor,
+            assignedBuilding: details.assignedBuilding ?? app.assignedBuilding,
+            confirmedVisitingTime: details.confirmedVisitingTime ?? app.confirmedVisitingTime,
+            adminNotes: details.adminNotes ?? app.adminNotes,
+          } : {})
+        } : app))
       );
     }
   };
@@ -395,6 +434,7 @@ export default function App() {
             <Hero
               setActiveTab={handleTabChange}
               setSearchFilters={setSearchFilters}
+              searchFilters={searchFilters}
               selectedDistrict={selectedDistrict}
               setSelectedDistrict={setSelectedDistrict}
               districts={districts}
@@ -402,16 +442,23 @@ export default function App() {
               facilities={facilities}
             />
 
-            {/* Curated Top-Priority Doctors Highlight Grid */}
-            <section className="py-12 bg-white border-t border-b border-slate-200">
+            {/* Curated Top-Priority Doctors Highlight Grid with Instant Reactive Filtering */}
+            <section id="featured-doctors-section" className="py-12 bg-white border-t border-b border-slate-200 scroll-mt-6">
               <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-8">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
                   <div>
-                    <h2 className="text-lg font-bold text-slate-800 md:text-xl">
-                      আমাদের সেরা বিশেষজ্ঞরা
-                    </h2>
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-lg font-bold text-slate-800 md:text-xl">
+                        আমাদের সেরা বিশেষজ্ঞরা
+                      </h2>
+                      <span className="inline-flex items-center rounded-full bg-sky-50 px-2.5 py-0.5 text-xs font-bold text-[#0284C7] border border-sky-100">
+                        {homeFilteredDoctors.length} জন ডাক্তার
+                      </span>
+                    </div>
                     <p className="text-xs text-slate-400 font-bold mt-1">
-                      রাজশাহী মেডিকেল কলেজ ও হাসপাতালের বিশিষ্ট সহযোগী ও সহকারী অধ্যাপকগণ
+                      {selectedDistrict && selectedDistrict !== 'সকল জেলা' && selectedDistrict !== 'সকল জেলা (All)'
+                        ? `${selectedDistrict} জেলার শীর্ষ বিশেষজ্ঞ ডাক্তারগণ`
+                        : 'বিভিন্ন মেডিকেল কলেজ ও হাসপাতালের বিশিষ্ট বিশেষজ্ঞ ও চিকিৎসকগণ'}
                     </p>
                   </div>
                   <button
@@ -422,22 +469,93 @@ export default function App() {
                     className="group inline-flex items-center gap-1.5 text-xs font-bold text-[#0284C7] hover:underline self-start cursor-pointer"
                     id="home-view-all-docs"
                   >
-                    <span>সকল ডাক্তার সূচী দেখুন</span>
+                    <span>সম্পূর্ণ ডাক্তার সূচী দেখুন</span>
                     <ChevronRight className="h-4 w-4 transition group-hover:translate-x-0.5" />
                   </button>
                 </div>
+
+                {/* Active Filter Chips in Home Section */}
+                {(searchFilters.specialty || searchFilters.facility || (selectedDistrict && selectedDistrict !== 'সকল জেলা' && selectedDistrict !== 'সকল জেলা (All)')) && (
+                  <div className="mb-6 flex flex-wrap items-center gap-2 rounded-xl bg-slate-50 p-3 border border-slate-200/80">
+                    <span className="text-xs font-bold text-slate-600 flex items-center gap-1">
+                      <Filter className="h-3.5 w-3.5 text-[#0284C7]" /> সক্রিয় ফিল্টার:
+                    </span>
+
+                    {selectedDistrict && selectedDistrict !== 'সকল জেলা' && selectedDistrict !== 'সকল জেলা (All)' && (
+                      <span className="inline-flex items-center gap-1.5 rounded-lg bg-white px-2.5 py-1 text-xs font-bold text-slate-700 border border-slate-200 shadow-2xs">
+                        <span>জেলা: {selectedDistrict}</span>
+                        <button
+                          onClick={() => {
+                            setSelectedDistrict('সকল জেলা');
+                            setSearchFilters(prev => ({ ...prev, district: 'সকল জেলা' }));
+                          }}
+                          className="text-slate-400 hover:text-rose-500 cursor-pointer"
+                          title="জেলা ফিল্টার মুছুন"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </span>
+                    )}
+
+                    {searchFilters.specialty && (
+                      <span className="inline-flex items-center gap-1.5 rounded-lg bg-sky-50 px-2.5 py-1 text-xs font-bold text-[#0284C7] border border-sky-200 shadow-2xs">
+                        <span>বিশেষজ্ঞ: {searchFilters.specialty}</span>
+                        <button
+                          onClick={() => setSearchFilters(prev => ({ ...prev, specialty: '' }))}
+                          className="text-[#0284C7]/70 hover:text-rose-500 cursor-pointer"
+                          title="বিশেষজ্ঞ ফিল্টার মুছুন"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </span>
+                    )}
+
+                    {searchFilters.facility && (
+                      <span className="inline-flex items-center gap-1.5 rounded-lg bg-white px-2.5 py-1 text-xs font-bold text-slate-700 border border-slate-200 shadow-2xs">
+                        <span>হাসপাতাল: {searchFilters.facility}</span>
+                        <button
+                          onClick={() => setSearchFilters(prev => ({ ...prev, facility: '' }))}
+                          className="text-slate-400 hover:text-rose-500 cursor-pointer"
+                          title="হাসপাতাল ফিল্টার মুছুন"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </span>
+                    )}
+
+                    <button
+                      onClick={() => {
+                        setSelectedDistrict('সকল জেলা');
+                        resetSearchFilters();
+                      }}
+                      className="ml-auto text-xs font-bold text-rose-600 hover:underline cursor-pointer px-1 py-0.5"
+                    >
+                      সব ফিল্টার মুছুন
+                    </button>
+                  </div>
+                )}
 
                 {isLoading ? (
                   <div className="text-center py-12 text-xs font-bold text-slate-400">
                     লোড হচ্ছে...
                   </div>
-                ) : doctors.length === 0 ? (
-                  <div className="text-center py-12 text-xs font-bold text-slate-400">
-                    কোন ডাক্তার তালিকাভুক্ত নেই। অ্যাডমিন প্যানেল থেকে ডাক্তার যোগ করুন।
+                ) : homeFilteredDoctors.length === 0 ? (
+                  <div className="text-center py-12 bg-slate-50/50 rounded-xl border border-dashed border-slate-200 p-8">
+                    <p className="text-sm font-bold text-slate-700">নির্বাচিত ফিল্টারের সাথে কোনো ডাক্তার পাওয়া যায়নি</p>
+                    <p className="text-xs text-slate-400 font-bold mt-1">অন্য ক্যাটাগরি বা জেলা সিলেক্ট করুন অথবা ফিল্টার রিসেট করুন।</p>
+                    <button
+                      onClick={() => {
+                        setSelectedDistrict('সকল জেলা');
+                        resetSearchFilters();
+                      }}
+                      className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-[#0284C7] px-4 py-2 text-xs font-bold text-white hover:bg-[#0274af] cursor-pointer"
+                    >
+                      সকল ডাক্তার দেখুন
+                    </button>
                   </div>
                 ) : (
                   <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-                    {doctors.slice(0, 3).map((doc) => (
+                    {homeFilteredDoctors.map((doc) => (
                       <div
                         key={doc.id}
                         className="rounded-lg border border-slate-200 p-5 hover:border-[#0284C7] transition bg-white flex flex-col justify-between"
@@ -459,8 +577,8 @@ export default function App() {
                           <p className="text-[11px] font-bold text-slate-500 mt-1">{doc.workplace}</p>
 
                           <div className="mt-4 rounded-lg bg-slate-50 p-2.5 border border-slate-200 text-[11px] text-slate-500 space-y-1 font-bold">
-                            <p>🕒 সময়: <b className="text-slate-700">{doc.visitingTime}</b></p>
-                            <p>🏥 চেম্বার: <b className="text-slate-700 line-clamp-1">{doc.facility.replace(', রাজশাহী', '')}</b></p>
+                            <p>🕒 সময়: <b className="text-slate-700">{doc.visitingTime || 'বিকাল ৫:০০ - রাত ৮:৩০'}</b></p>
+                            <p>🏥 চেম্বার: <b className="text-slate-700 line-clamp-1">{doc.facility ? doc.facility.replace(', রাজশাহী', '') : 'পপুলার ডায়াগনস্টিক সেন্টার'}</b></p>
                           </div>
                         </div>
 

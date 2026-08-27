@@ -9,9 +9,15 @@ import {
   ShieldCheck, 
   RefreshCw,
   Building,
-  UserCheck
+  UserCheck,
+  Star,
+  Eye,
+  X,
+  Filter
 } from 'lucide-react';
 import { Doctor, Specialty, Facility, District } from '../types';
+import { filterDoctorsList } from '../utils/filterDoctors';
+import DoctorProfileModal from './DoctorProfileModal';
 
 interface DoctorDirectoryProps {
   doctors: Doctor[];
@@ -41,6 +47,7 @@ export default function DoctorDirectory({
   const [selectedSpecialty, setSelectedSpecialty] = useState(initialFilters.specialty);
   const [selectedFacility, setSelectedFacility] = useState(initialFilters.facility);
   const [selectedDays, setSelectedDays] = useState<string[]>([]);
+  const [selectedDoctorForModal, setSelectedDoctorForModal] = useState<Doctor | null>(null);
 
   // Synchronize initial filters from Hero if changed
   React.useEffect(() => {
@@ -69,61 +76,21 @@ export default function DoctorDirectory({
     resetInitialFilters();
   };
 
-  // Filter Logic matching the flattened relational database mapping
+  // Filter Logic using unified helper
   const filteredDoctors = useMemo(() => {
-    return doctors.filter(doc => {
-      // 1. Keyword search (by name, degrees, bmdc, workplace)
-      const term = searchTerm.toLowerCase().trim();
-      const matchesSearch = 
-        term === '' ||
-        (doc.name || '').toLowerCase().includes(term) ||
-        (doc.degrees || '').toLowerCase().includes(term) ||
-        (doc.bmdc || '').toLowerCase().includes(term) ||
-        (doc.workplace || '').toLowerCase().includes(term) ||
-        (doc.specialty || '').toLowerCase().includes(term);
-
-      // 2. Specialty Filter
-      let matchesSpecialty = true;
-      if (selectedSpecialty && selectedSpecialty !== '') {
-        const specMatch = specialties.find(
-          s => s.nameBn === selectedSpecialty || s.id === selectedSpecialty || s.nameEn?.toLowerCase() === selectedSpecialty.toLowerCase()
-        );
-        matchesSpecialty = 
-          doc.specialty === selectedSpecialty ||
-          doc.specialtyNameBn === selectedSpecialty ||
-          doc.specialtyId === selectedSpecialty ||
-          (specMatch ? (doc.specialtyId === specMatch.id || doc.specialty === specMatch.nameBn || doc.specialtyNameBn === specMatch.nameBn) : false);
-      }
-
-      // 3. Chamber Facility Filter
-      let matchesFacility = true;
-      if (selectedFacility && selectedFacility !== '') {
-        matchesFacility = 
-          doc.facilityName === selectedFacility || 
-          doc.facilityId === selectedFacility ||
-          doc.facility === selectedFacility;
-      }
-
-      // 4. District Filter
-      let matchesDistrict = true;
-      if (selectedDistrict && selectedDistrict !== 'সকল জেলা' && selectedDistrict !== 'all') {
-        const currentDistrictObj = districts.find(
-          d => d.nameBn === selectedDistrict || d.id === selectedDistrict || d.nameEn?.toLowerCase() === selectedDistrict.toLowerCase()
-        );
-        matchesDistrict = 
-          !doc.facilityDistrictId ||
-          doc.facilityDistrictId === '' ||
-          (currentDistrictObj ? (doc.facilityDistrictId === currentDistrictObj.id || doc.facilityDistrictId === currentDistrictObj.nameBn) : true);
-      }
-
-      // 5. Visiting Days Filter
-      const matchesDays = 
-        selectedDays.length === 0 || 
-        selectedDays.some(day => (doc.visitingDays || []).includes(day));
-
-      return matchesSearch && matchesSpecialty && matchesFacility && matchesDistrict && matchesDays;
-    }).sort((a, b) => (a.priorityIndex || 0) - (b.priorityIndex || 0));
-  }, [doctors, specialties, districts, selectedDistrict, searchTerm, selectedSpecialty, selectedFacility, selectedDays]);
+    return filterDoctorsList(
+      doctors,
+      {
+        searchTerm,
+        selectedDistrict,
+        selectedSpecialty,
+        selectedFacility,
+        selectedDays
+      },
+      specialties,
+      districts
+    ).sort((a, b) => (a.priorityIndex || 0) - (b.priorityIndex || 0));
+  }, [doctors, searchTerm, selectedSpecialty, selectedFacility, selectedDistrict, selectedDays, specialties, districts]);
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 bg-[#F8FAFC]">
@@ -163,27 +130,26 @@ export default function DoctorDirectory({
             </div>
 
             {/* District Selector in Sidebar */}
-            {districts && districts.length > 0 && (
-              <div>
-                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
-                  জেলা (District)
-                </label>
-                <div className="relative">
-                  <select
-                    value={selectedDistrict}
-                    onChange={(e) => setSelectedDistrict?.(e.target.value)}
-                    className="w-full rounded-lg border border-slate-200 py-2 pl-3 pr-8 text-xs font-bold text-slate-800 focus:border-[#0284C7] focus:outline-none bg-white"
-                    id="sidebar-district-select"
-                  >
-                    {districts.filter(d => d.isActive !== false).map((dist) => (
-                      <option key={dist.id} value={dist.nameBn}>
-                        {dist.nameBn} {dist.nameEn ? `(${dist.nameEn})` : ''}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+            <div>
+              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                জেলা (District)
+              </label>
+              <div className="relative">
+                <select
+                  value={selectedDistrict}
+                  onChange={(e) => setSelectedDistrict?.(e.target.value)}
+                  className="w-full rounded-lg border border-slate-200 py-2 pl-3 pr-8 text-xs font-bold text-slate-800 focus:border-[#0284C7] focus:outline-none bg-white cursor-pointer"
+                  id="sidebar-district-select"
+                >
+                  <option value="সকল জেলা">সকল জেলা (All)</option>
+                  {districts && districts.filter(d => d.isActive !== false).map((dist) => (
+                    <option key={dist.id} value={dist.nameBn}>
+                      {dist.nameBn} {dist.nameEn ? `(${dist.nameEn})` : ''}
+                    </option>
+                  ))}
+                </select>
               </div>
-            )}
+            </div>
 
             {/* Keyword Search */}
             <div>
@@ -212,13 +178,13 @@ export default function DoctorDirectory({
                 <button
                   onClick={() => setSelectedSpecialty('')}
                   className={`flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-xs font-bold transition cursor-pointer ${
-                    selectedSpecialty === ''
+                    selectedSpecialty === '' || selectedSpecialty === 'সকল বিশেষজ্ঞ'
                       ? 'bg-slate-100 text-slate-900 border border-slate-200/40 font-bold'
                       : 'text-slate-600 hover:bg-slate-50'
                   }`}
                   id="specialty-all-btn"
                 >
-                  <span>সকল বিশেষজ্ঞ</span>
+                  <span>সকল বিশেষজ্ঞ (All)</span>
                   <span className="text-[10px] opacity-70">({doctors.length})</span>
                 </button>
                 {specialties.filter(s => s.isActive !== false).map((spec) => {
@@ -254,10 +220,10 @@ export default function DoctorDirectory({
               <select
                 value={selectedFacility}
                 onChange={(e) => setSelectedFacility(e.target.value)}
-                className="w-full rounded-lg border border-slate-200 py-2 px-2.5 text-xs font-bold text-slate-700 focus:border-slate-400 focus:outline-none bg-white"
+                className="w-full rounded-lg border border-slate-200 py-2 px-2.5 text-xs font-bold text-slate-700 focus:border-slate-400 focus:outline-none bg-white cursor-pointer"
                 id="facility-filter-select"
               >
-                <option value="">সকল হাসপাতাল/চেম্বার</option>
+                <option value="">সকল হাসপাতাল ও ডায়াগনস্টিক (All)</option>
                 {facilities.map((fac) => (
                   <option key={fac.id} value={fac.name}>
                     {fac.name}
@@ -296,6 +262,95 @@ export default function DoctorDirectory({
 
         {/* Right column: Doctor List Grid */}
         <main className="lg:col-span-3">
+          {/* Active Filter Indicators and Count */}
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-xs">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="flex items-center gap-1.5 text-xs font-bold text-slate-700">
+                <Filter className="h-3.5 w-3.5 text-[#0284C7]" />
+                <span>ফলাফল:</span>
+                <span className="rounded-md bg-[#0284C7]/10 px-2 py-0.5 text-xs font-black text-[#0284C7]">
+                  {filteredDoctors.length} জন ডাক্তার
+                </span>
+              </span>
+
+              {/* Active Filter Chips */}
+              {selectedDistrict && selectedDistrict !== 'সকল জেলা' && selectedDistrict !== 'সকল জেলা (All)' && selectedDistrict !== 'all' && (
+                <span className="inline-flex items-center gap-1 rounded-md bg-sky-50 px-2 py-1 text-[11px] font-bold text-sky-700 border border-sky-200">
+                  <span>জেলা: {selectedDistrict}</span>
+                  <button 
+                    onClick={() => setSelectedDistrict?.('সকল জেলা')}
+                    className="hover:text-sky-900 cursor-pointer ml-0.5"
+                    title="মুছে ফেলুন"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              )}
+
+              {selectedSpecialty && selectedSpecialty !== 'সকল বিশেষজ্ঞ' && selectedSpecialty !== 'all' && (
+                <span className="inline-flex items-center gap-1 rounded-md bg-blue-50 px-2 py-1 text-[11px] font-bold text-blue-700 border border-blue-200">
+                  <span>বিশেষজ্ঞ: {selectedSpecialty}</span>
+                  <button 
+                    onClick={() => setSelectedSpecialty('')}
+                    className="hover:text-blue-900 cursor-pointer ml-0.5"
+                    title="মুছে ফেলুন"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              )}
+
+              {selectedFacility && selectedFacility !== 'সকল হাসপাতাল/চেম্বার' && selectedFacility !== 'all' && (
+                <span className="inline-flex items-center gap-1 rounded-md bg-teal-50 px-2 py-1 text-[11px] font-bold text-teal-700 border border-teal-200">
+                  <span>হাসপাতাল: {selectedFacility}</span>
+                  <button 
+                    onClick={() => setSelectedFacility('')}
+                    className="hover:text-teal-900 cursor-pointer ml-0.5"
+                    title="মুছে ফেলুন"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              )}
+
+              {searchTerm && (
+                <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-2 py-1 text-[11px] font-bold text-amber-800 border border-amber-200">
+                  <span>অনুসন্ধান: "{searchTerm}"</span>
+                  <button 
+                    onClick={() => setSearchTerm('')}
+                    className="hover:text-amber-950 cursor-pointer ml-0.5"
+                    title="মুছে ফেলুন"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              )}
+
+              {selectedDays.length > 0 && (
+                <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-1 text-[11px] font-bold text-emerald-700 border border-emerald-200">
+                  <span>দিন: {selectedDays.join(', ')}</span>
+                  <button 
+                    onClick={() => setSelectedDays([])}
+                    className="hover:text-emerald-950 cursor-pointer ml-0.5"
+                    title="মুছে ফেলুন"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              )}
+            </div>
+
+            {/* Clear All Trigger */}
+            {(searchTerm || selectedSpecialty || selectedFacility || selectedDays.length > 0 || (selectedDistrict && selectedDistrict !== 'সকল জেলা' && selectedDistrict !== 'সকল জেলা (All)')) && (
+              <button
+                onClick={resetAllFilters}
+                className="text-[11px] font-bold text-rose-600 hover:text-rose-700 hover:underline cursor-pointer"
+              >
+                সব ফিল্টার মুছুন
+              </button>
+            )}
+          </div>
+
           {filteredDoctors.length === 0 ? (
             /* Clean Empty State UI */
             <div 
@@ -339,17 +394,27 @@ export default function DoctorDirectory({
                           </div>
 
                           <div>
-                            {/* Specialty Badge */}
-                            <span className="inline-flex rounded-md bg-slate-100 px-2 py-0.5 text-[9px] font-bold text-slate-600 border border-slate-200/50">
-                              {doc.specialtyNameBn || 'মেডিসিন'}
-                            </span>
-                            <h3 className="mt-1 font-bold text-slate-800 text-xs sm:text-sm group-hover:text-[#0284C7] transition">
+                            {/* Specialty Badge & Rating */}
+                            <div className="flex items-center gap-2">
+                              <span className="inline-flex rounded-md bg-slate-100 px-2 py-0.5 text-[9px] font-bold text-slate-600 border border-slate-200/50">
+                                {doc.specialtyNameBn || doc.specialty || 'মেডিসিন'}
+                              </span>
+                              <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold text-amber-800 border border-amber-200/60">
+                                <Star className="h-3 w-3 fill-amber-400 text-amber-500" />
+                                <span>{(doc.rating || 5.0).toFixed(1)}</span>
+                                <span className="text-[9px] text-amber-600 font-semibold">({doc.reviewCount || 10})</span>
+                              </span>
+                            </div>
+                            <h3 
+                              onClick={() => setSelectedDoctorForModal(doc)}
+                              className="mt-1 font-bold text-slate-800 text-xs sm:text-sm group-hover:text-[#0284C7] transition cursor-pointer"
+                            >
                               {doc.name}
                             </h3>
                           </div>
                         </div>
 
-                        <span className="inline-flex items-center gap-0.5 rounded-md bg-blue-50 px-1.5 py-0.5 text-[9px] font-bold text-blue-700 border border-blue-200/30">
+                        <span className="inline-flex items-center gap-0.5 rounded-md bg-blue-50 px-1.5 py-0.5 text-[9px] font-bold text-blue-700 border border-blue-200/30 shrink-0">
                           <ShieldCheck className="h-3 w-3" />
                           <span>BM&DC ভেরিফাইড</span>
                         </span>
@@ -362,13 +427,18 @@ export default function DoctorDirectory({
                         <p className="text-[11px] font-bold text-slate-400 mt-0.5">{doc.workplace}</p>
                       </div>
 
-                      {/* Chambers list */}
+                      {/* Chambers list with Room, Floor, Stand */}
                       <div className="mt-4 space-y-2 rounded-lg bg-slate-50/50 p-3 text-xs text-slate-600 font-semibold border border-slate-100">
                         <div className="flex items-start gap-2">
-                          <Building className="h-3.5 w-3.5 text-slate-400 shrink-0 mt-0.5" />
-                          <span className="line-clamp-2 leading-relaxed text-[11px]">
-                            {doc.facilityName} (কক্ষ: {doc.chamberRoomNo})
-                          </span>
+                          <Building className="h-3.5 w-3.5 text-[#0284C7] shrink-0 mt-0.5" />
+                          <div className="leading-tight">
+                            <span className="font-bold text-slate-800 text-[11px] block">
+                              {doc.facilityName || doc.facility}
+                            </span>
+                            <span className="text-[10px] text-slate-500 font-medium">
+                              কক্ষ: {doc.chamberRoomNo || 'নির্ধারিত নয়'} | ফ্লোর: {doc.chamberFloor || 'নিচতলা'} ({doc.chamberBuildingStand || 'মেইন বিল্ডিং'})
+                            </span>
+                          </div>
                         </div>
                         <div className="flex items-center gap-2">
                           <Clock className="h-3.5 w-3.5 text-slate-400" />
@@ -396,11 +466,22 @@ export default function DoctorDirectory({
                       </div>
                     </div>
 
-                    {/* Booking Trigger Button */}
-                    <div className="mt-5 pt-2">
+                    {/* Action Buttons: Details/Reviews + Booking Trigger */}
+                    <div className="mt-5 pt-2 grid grid-cols-2 gap-2">
                       <button
+                        type="button"
+                        onClick={() => setSelectedDoctorForModal(doc)}
+                        className="flex items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 py-2.5 text-center text-xs font-bold text-slate-700 transition cursor-pointer"
+                        id={`view-reviews-btn-${doc.id}`}
+                      >
+                        <Eye className="h-3.5 w-3.5 text-[#0284C7]" />
+                        <span>বিস্তারিত ও রিভিউ</span>
+                      </button>
+                      
+                      <button
+                        type="button"
                         onClick={() => onBookDoctor(doc)}
-                        className="w-full rounded-lg bg-[#0284C7] hover:bg-[#0274af] py-2.5 text-center text-xs font-bold text-white transition cursor-pointer"
+                        className="w-full rounded-lg bg-[#0284C7] hover:bg-[#0274af] py-2.5 text-center text-xs font-bold text-white transition cursor-pointer shadow-xs"
                         id={`book-doctor-btn-${doc.id}`}
                       >
                         সিরিয়াল বুক করুন
@@ -413,6 +494,14 @@ export default function DoctorDirectory({
           )}
         </main>
       </div>
+
+      {/* Doctor Profile & Reviews Modal */}
+      <DoctorProfileModal
+        doctor={selectedDoctorForModal}
+        isOpen={!!selectedDoctorForModal}
+        onClose={() => setSelectedDoctorForModal(null)}
+        onBookNow={(doc) => onBookDoctor(doc)}
+      />
     </div>
   );
 }

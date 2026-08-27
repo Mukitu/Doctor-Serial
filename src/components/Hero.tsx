@@ -24,7 +24,8 @@ import { ActiveTab, District, Specialty, Facility } from '../types';
 
 interface HeroProps {
   setActiveTab: (tab: ActiveTab) => void;
-  setSearchFilters: (filters: { district: string; specialty: string; facility: string }) => void;
+  setSearchFilters: React.Dispatch<React.SetStateAction<{ district: string; specialty: string; facility: string }>> | ((filters: { district: string; specialty: string; facility: string }) => void);
+  searchFilters?: { district: string; specialty: string; facility: string };
   selectedDistrict: string;
   setSelectedDistrict?: (district: string) => void;
   districts?: District[];
@@ -35,32 +36,58 @@ interface HeroProps {
 export default function Hero({ 
   setActiveTab, 
   setSearchFilters, 
+  searchFilters,
   selectedDistrict,
   setSelectedDistrict,
   districts = [],
   specialties = [],
   facilities = [],
 }: HeroProps) {
-  const [specialty, setSpecialty] = useState('');
-  const [facility, setFacility] = useState('');
+  const specialty = searchFilters?.specialty || '';
+  const facility = searchFilters?.facility || '';
+
+  const handleDistrictChange = (newDistrict: string) => {
+    setSelectedDistrict?.(newDistrict);
+    setSearchFilters(prev => ({
+      ...(typeof prev === 'object' ? prev : {}),
+      district: newDistrict,
+      specialty: searchFilters?.specialty || '',
+      facility: searchFilters?.facility || ''
+    }));
+  };
+
+  const handleSpecialtyChange = (newSpecialty: string) => {
+    setSearchFilters(prev => ({
+      ...(typeof prev === 'object' ? prev : {}),
+      district: selectedDistrict,
+      specialty: newSpecialty,
+      facility: searchFilters?.facility || ''
+    }));
+  };
+
+  const handleFacilityChange = (newFacility: string) => {
+    setSearchFilters(prev => ({
+      ...(typeof prev === 'object' ? prev : {}),
+      district: selectedDistrict,
+      specialty: searchFilters?.specialty || '',
+      facility: newFacility
+    }));
+  };
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    setSearchFilters({
-      district: selectedDistrict,
-      specialty: specialty,
-      facility: facility
-    });
-    setActiveTab('doctors');
+    const target = document.getElementById('featured-doctors-section');
+    if (target) {
+      target.scrollIntoView({ behavior: 'smooth' });
+    }
   };
 
   const handleCategoryClick = (specialtyName: string) => {
-    setSearchFilters({
-      district: selectedDistrict,
-      specialty: specialtyName,
-      facility: ''
-    });
-    setActiveTab('doctors');
+    handleSpecialtyChange(specialtyName);
+    const target = document.getElementById('featured-doctors-section');
+    if (target) {
+      target.scrollIntoView({ behavior: 'smooth' });
+    }
   };
 
   // Icon helper mapping to support all common specialty icons dynamically
@@ -161,12 +188,11 @@ export default function Hero({
                 </label>
                 <select
                   value={selectedDistrict}
-                  onChange={(e) => {
-                    setSelectedDistrict?.(e.target.value);
-                  }}
+                  onChange={(e) => handleDistrictChange(e.target.value)}
                   className="bg-transparent text-xs font-bold text-slate-800 outline-none cursor-pointer"
                   id="hero-district-select"
                 >
+                  <option value="সকল জেলা">সকল জেলা (All)</option>
                   {renderedDistricts.map((dist) => (
                     <option key={dist.id} value={dist.name}>
                       {dist.name} {dist.nameEn ? `(${dist.nameEn})` : ''}
@@ -182,11 +208,11 @@ export default function Hero({
                 </label>
                 <select
                   value={specialty}
-                  onChange={(e) => setSpecialty(e.target.value)}
+                  onChange={(e) => handleSpecialtyChange(e.target.value)}
                   className="bg-transparent text-xs font-bold text-slate-800 outline-none cursor-pointer"
                   id="hero-specialty-select"
                 >
-                  <option value="">সকল বিশেষজ্ঞ সিলেক্ট করুন</option>
+                  <option value="">সকল বিশেষজ্ঞ (All)</option>
                   {renderedSpecialties.map((spec) => (
                     <option key={spec.id} value={spec.name}>
                       {spec.name} {spec.labelEn ? `(${spec.labelEn})` : ''}
@@ -202,11 +228,11 @@ export default function Hero({
                 </label>
                 <select
                   value={facility}
-                  onChange={(e) => setFacility(e.target.value)}
+                  onChange={(e) => handleFacilityChange(e.target.value)}
                   className="bg-transparent text-xs font-bold text-slate-800 outline-none cursor-pointer"
                   id="hero-facility-select"
                 >
-                  <option value="">সকল হাসপাতাল/চেম্বার</option>
+                  <option value="">সকল হাসপাতাল ও ডায়াগনস্টিক (All)</option>
                   {renderedFacilities.map((fac) => (
                     <option key={fac.id} value={fac.name}>
                       {fac.name}
@@ -216,16 +242,35 @@ export default function Hero({
               </div>
             </div>
 
-            {/* Submit Search Button */}
-            <div className="mt-4 flex justify-end">
-              <button
-                type="submit"
-                className="flex w-full sm:w-auto items-center justify-center gap-2 rounded-lg bg-[#0284C7] hover:bg-[#0274af] px-6 py-3 text-xs font-bold text-white transition cursor-pointer shadow-sm"
-                id="hero-submit-btn"
-              >
-                <Search className="h-4 w-4" />
-                <span>ডাক্তার খুঁজুন (Search Doctor)</span>
-              </button>
+            {/* Quick Auto-filter info and Search Doctor Action */}
+            <div className="mt-4 flex flex-col sm:flex-row items-center justify-between gap-2.5 pt-2 border-t border-slate-100">
+              <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-500">
+                <span className="inline-block h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span>সিলেক্ট করলেই নিচে স্বয়ংক্রিয়ভাবে ডাক্তারদের তালিকা ফিল্টার হবে</span>
+              </div>
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                {(specialty || facility || (selectedDistrict && selectedDistrict !== 'সকল জেলা' && selectedDistrict !== 'সকল জেলা (All)')) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleDistrictChange('সকল জেলা');
+                      handleSpecialtyChange('');
+                      handleFacilityChange('');
+                    }}
+                    className="text-xs font-bold text-slate-500 hover:text-rose-600 px-3 py-2 cursor-pointer transition"
+                  >
+                    রিসেট (Reset)
+                  </button>
+                )}
+                <button
+                  type="submit"
+                  className="flex w-full sm:w-auto items-center justify-center gap-2 rounded-lg bg-[#0284C7] hover:bg-[#0274af] px-5 py-2.5 text-xs font-bold text-white transition cursor-pointer shadow-xs"
+                  id="hero-submit-btn"
+                >
+                  <Search className="h-3.5 w-3.5" />
+                  <span>ডাক্তার তালিকা দেখুন (View List)</span>
+                </button>
+              </div>
             </div>
           </form>
         </div>

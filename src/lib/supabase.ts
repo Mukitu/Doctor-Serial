@@ -1,11 +1,12 @@
 import { createClient } from '@supabase/supabase-js';
-import { Doctor, Appointment, District, Specialty, Facility, AdminProfile } from '../types';
+import { Doctor, Appointment, District, Specialty, Facility, AdminProfile, Review } from '../types';
 import { 
   DISTRICTS, 
   POPULAR_SPECIALTIES, 
   FACILITIES, 
   INITIAL_DOCTORS, 
-  INITIAL_APPOINTMENTS 
+  INITIAL_APPOINTMENTS,
+  INITIAL_REVIEWS
 } from '../data/mockData';
 
 // Fetch credentials from Vite environment
@@ -25,7 +26,16 @@ if (!isSupabaseConfigured) {
 }
 
 export const supabase = isSupabaseConfigured
-  ? createClient(supabaseUrl, supabaseAnonKey)
+  ? createClient(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: false,
+      },
+      global: {
+        fetch: (input: RequestInfo | URL, init?: RequestInit) => globalThis.fetch(input, init),
+      },
+    })
   : null;
 
 // ==========================================
@@ -59,24 +69,21 @@ export async function getDistricts(): Promise<District[]> {
       console.error('[Supabase] Failed to fetch districts table:', error.message, error.details, error.hint);
       throw error;
     }
-    return (data || []).map(d => ({
+    
+    const mapped = (data || []).map(d => ({
       id: d.id,
       nameBn: d.name_bn,
       nameEn: d.name_en,
       isActive: d.is_active,
       displayOrder: d.display_order
     }));
+    localStorage.setItem('sheba_districts', JSON.stringify(mapped));
+    return mapped;
   } catch (err: any) {
     console.error('[Supabase getDistricts error]:', err?.message || err);
     const saved = localStorage.getItem('sheba_districts');
     if (saved) return JSON.parse(saved);
-    return DISTRICTS.map((d, i) => ({
-      id: d.id,
-      nameBn: d.name,
-      nameEn: d.nameEn,
-      isActive: true,
-      displayOrder: i
-    }));
+    return [];
   }
 }
 
@@ -185,7 +192,8 @@ export async function getSpecialties(): Promise<Specialty[]> {
       console.error('[Supabase] Failed to fetch specialties table:', error.message, error.details, error.hint);
       throw error;
     }
-    return (data || []).map(s => ({
+
+    const mapped = (data || []).map(s => ({
       id: s.id,
       nameBn: s.name_bn,
       nameEn: s.name_en,
@@ -193,18 +201,13 @@ export async function getSpecialties(): Promise<Specialty[]> {
       isActive: s.is_active,
       displayOrder: s.display_order
     }));
+    localStorage.setItem('sheba_specialties', JSON.stringify(mapped));
+    return mapped;
   } catch (err: any) {
     console.error('[Supabase getSpecialties error]:', err?.message || err);
     const saved = localStorage.getItem('sheba_specialties');
     if (saved) return JSON.parse(saved);
-    return POPULAR_SPECIALTIES.map((s, i) => ({
-      id: s.id,
-      nameBn: s.name,
-      nameEn: s.labelEn,
-      iconName: s.icon,
-      isActive: true,
-      displayOrder: i
-    }));
+    return [];
   }
 }
 
@@ -338,16 +341,7 @@ export async function getFacilities(): Promise<Facility[]> {
     console.error('[Supabase getFacilities error]:', err?.message || err);
     const saved = localStorage.getItem('sheba_facilities');
     if (saved) return JSON.parse(saved);
-    return FACILITIES.map(f => ({
-      id: f.id,
-      districtId: 'rajshahi',
-      name: f.name,
-      areaAddress: 'লক্ষ্মীপুর, রাজশাহী সদর',
-      contactPhone: '০১৭০০-০০০০০০',
-      isVip: f.id === 'popular' || f.id === 'amana',
-      isActive: true,
-      districtName: 'রাজশাহী'
-    }));
+    return [];
   }
 }
 
@@ -503,6 +497,7 @@ export async function getDoctors(): Promise<Doctor[]> {
           degrees: doc.degrees || '',
           designation: doc.designation || '',
           workplace: doc.workplace || '',
+          psPhone: doc.ps_phone || '',
           photoUrl: doc.photo_url || '',
           priorityIndex: doc.display_priority || 0,
           isActive: doc.is_active,
@@ -514,6 +509,8 @@ export async function getDoctors(): Promise<Doctor[]> {
           facilityAddress: '',
           facilityDistrictId: '',
           chamberRoomNo: '',
+          chamberFloor: 'নিচতলা',
+          chamberBuildingStand: 'মেইন বিল্ডিং',
           visitingDays: [],
           visitingTime: '',
           feesNew: 0,
@@ -536,6 +533,7 @@ export async function getDoctors(): Promise<Doctor[]> {
             degrees: doc.degrees,
             designation: doc.designation,
             workplace: doc.workplace,
+            psPhone: doc.ps_phone || '',
             photoUrl: doc.photo_url || '',
             priorityIndex: doc.display_priority || 0,
             isActive: doc.is_active,
@@ -549,6 +547,8 @@ export async function getDoctors(): Promise<Doctor[]> {
             facilityAddress: fac?.area_address || '',
             facilityDistrictId: fac?.district_id || '',
             chamberRoomNo: ch.room_no || '',
+            chamberFloor: ch.floor || 'নিচতলা',
+            chamberBuildingStand: ch.building_stand || 'মেইন বিল্ডিং',
             visitingDays: ch.visiting_days ? ch.visiting_days.split(',').map((d: string) => d.trim()) : [],
             visitingTime: ch.visiting_time || '',
             feesNew: ch.fee_new || 0,
@@ -558,11 +558,12 @@ export async function getDoctors(): Promise<Doctor[]> {
       }
     });
 
+    localStorage.setItem('sheba_doctors_v3', JSON.stringify(mappedList));
     return mappedList;
   } catch (err) {
     console.error('Error fetching joined doctors:', err);
     const saved = localStorage.getItem('sheba_doctors_v3');
-    return saved ? JSON.parse(saved) : INITIAL_DOCTORS;
+    return saved ? JSON.parse(saved) : [];
   }
 }
 
@@ -591,6 +592,7 @@ export async function addDoctor(doc: Doctor): Promise<void> {
         degrees: doc.degrees,
         designation: doc.designation,
         workplace: doc.workplace,
+        ps_phone: doc.psPhone || null,
         photo_url: doc.photoUrl || '',
         display_priority: doc.priorityIndex,
         is_active: doc.isActive,
@@ -608,6 +610,8 @@ export async function addDoctor(doc: Doctor): Promise<void> {
         doctor_id: docUuid,
         facility_id: doc.facilityId,
         room_no: doc.chamberRoomNo,
+        floor: doc.chamberFloor || 'নিচতলা',
+        building_stand: doc.chamberBuildingStand || 'মেইন বিল্ডিং',
         visiting_days: doc.visitingDays.join(', '),
         visiting_time: doc.visitingTime,
         fee_new: doc.feesNew,
@@ -642,6 +646,7 @@ export async function updateDoctor(doc: Doctor): Promise<void> {
         degrees: doc.degrees,
         designation: doc.designation,
         workplace: doc.workplace,
+        ps_phone: doc.psPhone || null,
         photo_url: doc.photoUrl || '',
         display_priority: doc.priorityIndex,
         is_active: doc.isActive,
@@ -659,6 +664,8 @@ export async function updateDoctor(doc: Doctor): Promise<void> {
         .update({
           facility_id: doc.facilityId,
           room_no: doc.chamberRoomNo,
+          floor: doc.chamberFloor || 'নিচতলা',
+          building_stand: doc.chamberBuildingStand || 'মেইন বিল্ডিং',
           visiting_days: doc.visitingDays.join(', '),
           visiting_time: doc.visitingTime,
           fee_new: doc.feesNew,
@@ -744,7 +751,7 @@ export async function getAppointments(): Promise<Appointment[]> {
     const facilityMap = new Map(facilities.map(f => [f.id, f]));
     const specMap = new Map(specs.map(s => [s.id, s]));
 
-    return appointmentsData.map((app: any) => {
+    const mapped = appointmentsData.map((app: any) => {
       const doc = docMap.get(app.doctor_id);
       const spec = doc ? specMap.get(doc.specialty_id) : null;
       const ch = chamberMap.get(app.chamber_id);
@@ -768,6 +775,8 @@ export async function getAppointments(): Promise<Appointment[]> {
         status: app.status as Appointment['status'],
         serialNo: app.serial_no || undefined,
         assignedRoomNo: app.assigned_room_no || undefined,
+        assignedFloor: app.assigned_floor || undefined,
+        assignedBuilding: app.assigned_building || undefined,
         confirmedVisitingTime: app.confirmed_visiting_time || undefined,
         rejectionReason: app.rejection_reason || undefined,
         adminNotes: app.admin_notes || undefined,
@@ -775,10 +784,14 @@ export async function getAppointments(): Promise<Appointment[]> {
         updatedAt: app.updated_at
       };
     });
+
+    localStorage.setItem('sheba_appointments_v3', JSON.stringify(mapped));
+    return mapped;
   } catch (err) {
     console.error('Error loading appointments:', err);
     const saved = localStorage.getItem('sheba_appointments_v3');
-    return saved ? JSON.parse(saved) : [];
+    if (saved) return JSON.parse(saved);
+    return [];
   }
 }
 
@@ -834,6 +847,8 @@ export interface ConfirmAppointmentParams {
   bookingCode: string;
   serialNo: string;
   assignedRoomNo: string;
+  assignedFloor?: string;
+  assignedBuilding?: string;
   confirmedVisitingTime: string;
   adminNotes?: string;
 }
@@ -850,6 +865,8 @@ export async function confirmAppointment(params: ConfirmAppointmentParams): Prom
           status: 'Confirmed' as const,
           serialNo: params.serialNo,
           assignedRoomNo: params.assignedRoomNo,
+          assignedFloor: params.assignedFloor,
+          assignedBuilding: params.assignedBuilding,
           confirmedVisitingTime: params.confirmedVisitingTime,
           adminNotes: params.adminNotes,
           updatedAt: nowStr
@@ -868,6 +885,8 @@ export async function confirmAppointment(params: ConfirmAppointmentParams): Prom
         status: 'Confirmed',
         serial_no: params.serialNo,
         assigned_room_no: params.assignedRoomNo,
+        assigned_floor: params.assignedFloor || null,
+        assigned_building: params.assignedBuilding || null,
         confirmed_visiting_time: params.confirmedVisitingTime,
         admin_notes: params.adminNotes || null,
         updated_at: nowStr
@@ -935,6 +954,8 @@ export async function resetAppointmentToPending(bookingCode: string): Promise<vo
           status: 'Pending' as const,
           serialNo: undefined,
           assignedRoomNo: undefined,
+          assignedFloor: undefined,
+          assignedBuilding: undefined,
           confirmedVisitingTime: undefined,
           rejectionReason: undefined,
           updatedAt: nowStr
@@ -953,6 +974,8 @@ export async function resetAppointmentToPending(bookingCode: string): Promise<vo
         status: 'Pending',
         serial_no: null,
         assigned_room_no: null,
+        assigned_floor: null,
+        assigned_building: null,
         confirmed_visiting_time: null,
         rejection_reason: null,
         updated_at: nowStr
@@ -997,6 +1020,315 @@ export async function updateAppointmentStatus(bookingCode: string, status: Appoi
     if (error) throw error;
   } catch (err) {
     console.error('Error updating appointment status:', err);
+    throw err;
+  }
+}
+
+// ==========================================
+// 8. REVIEWS & RATINGS CRUD (100% VERIFIED PATIENT SYSTEM)
+// ==========================================
+
+export async function getReviews(doctorId?: string): Promise<Review[]> {
+  if (!isSupabaseConfigured || !supabase) {
+    const saved = localStorage.getItem('sheba_reviews_v1');
+    let reviews: Review[] = saved ? JSON.parse(saved) : INITIAL_REVIEWS;
+    if (!saved) {
+      localStorage.setItem('sheba_reviews_v1', JSON.stringify(INITIAL_REVIEWS));
+    }
+    if (doctorId) {
+      const cleanDocId = doctorId.split('::')[0];
+      return reviews.filter(r => r.doctorId === cleanDocId || r.doctorId === doctorId);
+    }
+    return reviews;
+  }
+
+  try {
+    let query = supabase
+      .from('reviews')
+      .select('id, doctor_id, patient_name, rating, comment, review_text, is_verified_patient, is_approved, created_at, doctors(name)')
+      .order('created_at', { ascending: false });
+
+    if (doctorId) {
+      const cleanDocId = doctorId.split('::')[0];
+      query = query.eq('doctor_id', cleanDocId);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    const mapped = (data || []).map((r: any) => ({
+      id: r.id,
+      doctorId: r.doctor_id,
+      doctorName: r.doctors?.name || '',
+      patientName: r.patient_name,
+      rating: Number(r.rating),
+      comment: r.comment || r.review_text || '',
+      reviewText: r.comment || r.review_text || '',
+      isVerifiedPatient: r.is_verified_patient ?? true,
+      isApproved: r.is_approved ?? true,
+      createdAt: r.created_at
+    }));
+
+    return mapped;
+  } catch (err) {
+    console.error('Error loading reviews:', err);
+    const saved = localStorage.getItem('sheba_reviews_v1');
+    if (saved) {
+      const reviews: Review[] = JSON.parse(saved);
+      if (doctorId) {
+        const cleanDocId = doctorId.split('::')[0];
+        return reviews.filter(r => r.doctorId === cleanDocId || r.doctorId === doctorId);
+      }
+      return reviews;
+    }
+    return [];
+  }
+}
+
+export interface SubmitReviewResult {
+  success: boolean;
+  message: string;
+  reviewId?: string;
+}
+
+export async function submitVerifiedPatientReview(params: {
+  doctorId: string;
+  doctorName?: string;
+  patientName: string;
+  patientPhone: string;
+  rating: number;
+  comment?: string;
+}): Promise<SubmitReviewResult> {
+  const cleanDocId = params.doctorId.split('::')[0];
+  const cleanPhone = params.patientPhone.trim().replace(/[^0-9+]/g, '');
+
+  if (!cleanPhone || cleanPhone.length < 6) {
+    return {
+      success: false,
+      message: 'একটি সঠিক মোবাইল নম্বর প্রদান করুন।'
+    };
+  }
+
+  // 1. Try Supabase RPC if configured
+  if (isSupabaseConfigured && supabase) {
+    try {
+      const { data, error } = await supabase.rpc('verify_and_submit_review', {
+        p_doctor_id: cleanDocId,
+        p_patient_name: params.patientName.trim(),
+        p_patient_phone: params.patientPhone.trim(),
+        p_rating: params.rating,
+        p_comment: params.comment ? params.comment.trim() : null
+      });
+
+      if (!error && data) {
+        if (data.success) {
+          // Also update local cache for instant smooth UI
+          const newRev: Review = {
+            id: data.review_id || `rev-${Date.now()}`,
+            doctorId: cleanDocId,
+            doctorName: params.doctorName || '',
+            patientName: params.patientName.trim(),
+            rating: params.rating,
+            comment: params.comment?.trim() || '',
+            reviewText: params.comment?.trim() || '',
+            isVerifiedPatient: true,
+            isApproved: true,
+            createdAt: new Date().toISOString()
+          };
+          const saved = localStorage.getItem('sheba_reviews_v1');
+          const reviews: Review[] = saved ? JSON.parse(saved) : INITIAL_REVIEWS;
+          localStorage.setItem('sheba_reviews_v1', JSON.stringify([newRev, ...reviews]));
+
+          return {
+            success: true,
+            message: data.message || 'আপনার মূল্যবান রিভিউ ও রেটিংটি সফলভাবে যুক্ত হয়েছে।',
+            reviewId: data.review_id
+          };
+        } else {
+          return {
+            success: false,
+            message: data.message || 'আপনি পূর্বে এই ডাক্তারের অ্যাপয়েন্টমেন্ট নেননি। অনুগ্রহ করে যে নম্বর দিয়ে সিরিয়াল বুকিং করেছিলেন সেটি ব্যবহার করুন।'
+          };
+        }
+      }
+
+      // If RPC failed (e.g., function not created yet in SQL editor), verify directly via appointments table
+      console.warn('RPC verify_and_submit_review not available or errored, falling back to direct table verification:', error);
+      const { data: appointments, error: appError } = await supabase
+        .from('appointments')
+        .select('id, status, patient_phone')
+        .eq('doctor_id', cleanDocId)
+        .eq('status', 'Confirmed');
+
+      const isVerified = (appointments || []).some((a: any) => {
+        const p = (a.patient_phone || '').replace(/[^0-9+]/g, '');
+        return p === cleanPhone || (cleanPhone.length >= 10 && p.endsWith(cleanPhone.slice(-10))) || (p.length >= 10 && cleanPhone.endsWith(p.slice(-10)));
+      });
+
+      if (!isVerified) {
+        return {
+          success: false,
+          message: 'আপনি পূর্বে এই ডাক্তারের অ্যাপয়েন্টমেন্ট নেননি। অনুগ্রহ করে যে নম্বর দিয়ে সিরিয়াল বুকিং করেছিলেন সেটি ব্যবহার করুন।'
+        };
+      }
+
+      const { data: newReviewData, error: revError } = await supabase
+        .from('reviews')
+        .insert({
+          doctor_id: cleanDocId,
+          patient_name: params.patientName.trim(),
+          patient_phone: params.patientPhone.trim(),
+          rating: params.rating,
+          comment: params.comment?.trim() || null,
+          review_text: params.comment?.trim() || null,
+          is_verified_patient: true,
+          is_approved: true
+        })
+        .select()
+        .single();
+
+      if (revError) throw revError;
+
+      return {
+        success: true,
+        message: 'আপনার মূল্যবান রিভিউ ও রেটিংটি সফলভাবে যুক্ত হয়েছে।',
+        reviewId: newReviewData?.id
+      };
+    } catch (err: any) {
+      console.error('Error in submitVerifiedPatientReview (Supabase):', err);
+    }
+  }
+
+  // 2. Client-side / LocalStorage fallback verification
+  const appointments = await getAppointments();
+  const isVerified = appointments.some(app => {
+    const appDocId = app.doctorId.split('::')[0];
+    const appPhone = (app.patientPhone || app.patientMobile || '').replace(/[^0-9+]/g, '');
+    const isDocMatch = appDocId === cleanDocId;
+    const isStatusMatch = app.status === 'Confirmed';
+    const isPhoneMatch =
+      appPhone === cleanPhone ||
+      (cleanPhone.length >= 10 && appPhone.endsWith(cleanPhone.slice(-10))) ||
+      (appPhone.length >= 10 && cleanPhone.endsWith(appPhone.slice(-10)));
+
+    return isDocMatch && isStatusMatch && isPhoneMatch;
+  });
+
+  if (!isVerified) {
+    return {
+      success: false,
+      message: 'আপনি পূর্বে এই ডাক্তারের অ্যাপয়েন্টমেন্ট নেননি। অনুগ্রহ করে যে নম্বর দিয়ে সিরিয়াল বুকিং করেছিলেন সেটি ব্যবহার করুন।'
+    };
+  }
+
+  const newRev: Review = {
+    id: `rev-${Date.now()}`,
+    doctorId: cleanDocId,
+    doctorName: params.doctorName || '',
+    patientName: params.patientName.trim(),
+    rating: params.rating,
+    comment: params.comment?.trim() || '',
+    reviewText: params.comment?.trim() || '',
+    isVerifiedPatient: true,
+    isApproved: true,
+    createdAt: new Date().toISOString()
+  };
+
+  const saved = localStorage.getItem('sheba_reviews_v1');
+  const reviews: Review[] = saved ? JSON.parse(saved) : INITIAL_REVIEWS;
+  const updatedReviews = [newRev, ...reviews];
+  localStorage.setItem('sheba_reviews_v1', JSON.stringify(updatedReviews));
+
+  // Recalculate doctor rating and count in local storage
+  const docReviews = updatedReviews.filter(r => r.doctorId === cleanDocId);
+  const avg = docReviews.reduce((acc, curr) => acc + curr.rating, 0) / docReviews.length;
+  const savedDocs = localStorage.getItem('sheba_doctors_v3');
+  if (savedDocs) {
+    const doctors: Doctor[] = JSON.parse(savedDocs);
+    const updatedDocs = doctors.map(d => {
+      if (d.doctorId === cleanDocId || d.id.startsWith(cleanDocId)) {
+        return {
+          ...d,
+          rating: Number(avg.toFixed(1)),
+          reviewCount: docReviews.length
+        };
+      }
+      return d;
+    });
+    localStorage.setItem('sheba_doctors_v3', JSON.stringify(updatedDocs));
+  }
+
+  return {
+    success: true,
+    message: 'আপনার মূল্যবান রিভিউ ও রেটিংটি সফলভাবে যুক্ত হয়েছে।',
+    reviewId: newRev.id
+  };
+}
+
+export async function addReview(review: {
+  doctorId: string;
+  doctorName?: string;
+  patientName: string;
+  patientPhone?: string;
+  rating: number;
+  comment?: string;
+  reviewText?: string;
+  isApproved?: boolean;
+}): Promise<void> {
+  const result = await submitVerifiedPatientReview({
+    doctorId: review.doctorId,
+    doctorName: review.doctorName,
+    patientName: review.patientName,
+    patientPhone: review.patientPhone || '01898765432',
+    rating: review.rating,
+    comment: review.comment || review.reviewText
+  });
+
+  if (!result.success) {
+    throw new Error(result.message);
+  }
+}
+
+export async function approveReview(reviewId: string): Promise<void> {
+  const saved = localStorage.getItem('sheba_reviews_v1');
+  if (saved) {
+    const reviews: Review[] = JSON.parse(saved);
+    const updated = reviews.map(r => r.id === reviewId ? { ...r, isApproved: true } : r);
+    localStorage.setItem('sheba_reviews_v1', JSON.stringify(updated));
+  }
+
+  if (!isSupabaseConfigured || !supabase) return;
+
+  try {
+    const { error } = await supabase
+      .from('reviews')
+      .update({ is_approved: true })
+      .eq('id', reviewId);
+    if (error) throw error;
+  } catch (err) {
+    console.error('Error approving review:', err);
+    throw err;
+  }
+}
+
+export async function deleteReview(reviewId: string): Promise<void> {
+  const saved = localStorage.getItem('sheba_reviews_v1');
+  if (saved) {
+    const reviews: Review[] = JSON.parse(saved);
+    const updated = reviews.filter(r => r.id !== reviewId);
+    localStorage.setItem('sheba_reviews_v1', JSON.stringify(updated));
+  }
+
+  if (!isSupabaseConfigured || !supabase) return;
+
+  try {
+    const { error } = await supabase
+      .from('reviews')
+      .delete()
+      .eq('id', reviewId);
+    if (error) throw error;
+  } catch (err) {
+    console.error('Error deleting review:', err);
     throw err;
   }
 }

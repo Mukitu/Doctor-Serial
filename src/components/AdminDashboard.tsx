@@ -14,10 +14,26 @@ import {
   UserPlus,
   MapPin,
   Building,
-  Award
+  Award,
+  Star,
+  MessageSquare,
+  Phone,
+  Lock,
+  CheckCircle2,
+  Send
 } from 'lucide-react';
-import { Doctor, Appointment, Specialty, Facility, AdminProfile, District } from '../types';
-import { getAdmins, createAdminUser, updateAdminRole, revokeAdminAccess } from '../lib/supabase';
+import { Doctor, Appointment, Specialty, Facility, AdminProfile, District, Review } from '../types';
+import { 
+  getAdmins, 
+  createAdminUser, 
+  updateAdminRole, 
+  revokeAdminAccess,
+  getReviews,
+  addReview,
+  approveReview,
+  deleteReview,
+  confirmAppointment
+} from '../lib/supabase';
 
 interface AdminDashboardProps {
   doctors: Doctor[];
@@ -29,7 +45,18 @@ interface AdminDashboardProps {
   onAddDoctor: (doc: Doctor) => void;
   onUpdateDoctor: (doc: Doctor) => void;
   onDeleteDoctor: (id: string) => void;
-  onUpdateAppointmentStatus: (id: string, status: Appointment['status']) => void;
+  onUpdateAppointmentStatus: (
+    id: string,
+    status: Appointment['status'],
+    details?: {
+      serialNo?: string;
+      assignedRoomNo?: string;
+      assignedFloor?: string;
+      assignedBuilding?: string;
+      confirmedVisitingTime?: string;
+      adminNotes?: string;
+    }
+  ) => void;
   onAddDistrict: (dist: Omit<District, 'id'>) => Promise<void>;
   onUpdateDistrict: (dist: District) => Promise<void>;
   onDeleteDistrict: (id: string) => Promise<void>;
@@ -41,7 +68,7 @@ interface AdminDashboardProps {
   onDeleteSpecialty: (id: string) => Promise<void>;
 }
 
-type AdminSubTab = 'appointments' | 'doctors' | 'admins' | 'districts' | 'facilities' | 'specialties';
+type AdminSubTab = 'appointments' | 'doctors' | 'reviews' | 'admins' | 'districts' | 'facilities' | 'specialties';
 
 export default function AdminDashboard({
   doctors,
@@ -68,6 +95,27 @@ export default function AdminDashboard({
   const [editingDoctor, setEditingDoctor] = useState<Doctor | null>(null);
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+
+  // Reviews Management States
+  const [reviewsList, setReviewsList] = useState<Review[]>([]);
+  const [reviewsLoading, setReviewsLoading] = useState(false);
+  const [reviewDoctorFilter, setReviewDoctorFilter] = useState('');
+  const [showAddReviewModal, setShowAddReviewModal] = useState(false);
+  const [newRevDoctorId, setNewRevDoctorId] = useState(doctors[0]?.id || '');
+  const [newRevPatientName, setNewRevPatientName] = useState('');
+  const [newRevRating, setNewRevRating] = useState(5);
+  const [newRevText, setNewRevText] = useState('');
+  const [newRevSubmitting, setNewRevSubmitting] = useState(false);
+
+  // Appointment Confirmation Modal States
+  const [confirmingApp, setConfirmingApp] = useState<Appointment | null>(null);
+  const [confSerialNo, setConfSerialNo] = useState('');
+  const [confRoomNo, setConfRoomNo] = useState('');
+  const [confFloor, setConfFloor] = useState('');
+  const [confBuilding, setConfBuilding] = useState('');
+  const [confVisitingTime, setConfVisitingTime] = useState('');
+  const [confAdminNotes, setConfAdminNotes] = useState('');
+  const [confSubmitting, setConfSubmitting] = useState(false);
 
   // Super Admin Exclusive Management States
   const [adminProfiles, setAdminProfiles] = useState<AdminProfile[]>([]);
@@ -367,6 +415,10 @@ export default function AdminDashboard({
   const [docDesignation, setDocDesignation] = useState('');
   const [docWorkplace, setDocWorkplace] = useState('');
   const [docChamberAddress, setDocChamberAddress] = useState('');
+  const [docChamberRoomNo, setDocChamberRoomNo] = useState('৩০২');
+  const [docChamberFloor, setDocChamberFloor] = useState('৩য় তলা');
+  const [docChamberBuildingStand, setDocChamberBuildingStand] = useState('মেইন ভবন, লিফট-১');
+  const [docPsPhone, setDocPsPhone] = useState('');
   const [docVisitingDays, setDocVisitingDays] = useState<string[]>(['শনিবার', 'রবিবার', 'সোমবার']);
   const [docVisitingTime, setDocVisitingTime] = useState('বিকাল ৫:০০ - রাত ৮:৩০');
   const [docFeesNew, setDocFeesNew] = useState('৮০০');
@@ -377,6 +429,117 @@ export default function AdminDashboard({
   const [docPhotoUrl, setDocPhotoUrl] = useState('');
 
   const DAYS_LIST = ['শনিবার', 'রবিবার', 'সোমবার', 'মঙ্গলবার', 'বুধবার', 'বৃহস্পতিবার', 'শুক্রবার'];
+
+  // Load reviews when tab changes to reviews
+  const loadReviews = async () => {
+    setReviewsLoading(true);
+    try {
+      const data = await getReviews();
+      setReviewsList(data);
+    } catch (err) {
+      console.error('Failed to load reviews:', err);
+    } finally {
+      setReviewsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (subTab === 'reviews') {
+      loadReviews();
+    }
+  }, [subTab]);
+
+  const handleApproveReview = async (id: string) => {
+    try {
+      await approveReview(id);
+      await loadReviews();
+    } catch (err: any) {
+      alert(err.message || 'রিভিউ অনুমোদন করতে সমস্যা হয়েছে।');
+    }
+  };
+
+  const handleDeleteReview = async (id: string) => {
+    if (confirm('আপনি কি নিশ্চিতভাবে এই রিভিউটি মুছে ফেলতে চান?')) {
+      try {
+        await deleteReview(id);
+        await loadReviews();
+      } catch (err: any) {
+        alert(err.message || 'রিভিউ মুছতে সমস্যা হয়েছে।');
+      }
+    }
+  };
+
+  const handleAddReviewSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newRevDoctorId || !newRevPatientName.trim() || !newRevText.trim()) {
+      alert('সকল ফিল্ড পূরণ করুন।');
+      return;
+    }
+    setNewRevSubmitting(true);
+    try {
+      const selectedDoc = doctors.find(d => d.id === newRevDoctorId);
+      await addReview({
+        doctorId: newRevDoctorId,
+        doctorName: selectedDoc?.name || '',
+        patientName: newRevPatientName.trim(),
+        rating: newRevRating,
+        reviewText: newRevText.trim(),
+        isApproved: true
+      });
+      setShowAddReviewModal(false);
+      setNewRevPatientName('');
+      setNewRevText('');
+      setNewRevRating(5);
+      await loadReviews();
+      alert('রিভিউ সফলভাবে যোগ করা হয়েছে!');
+    } catch (err: any) {
+      alert(err.message || 'রিভিউ যোগ করতে সমস্যা হয়েছে।');
+    } finally {
+      setNewRevSubmitting(false);
+    }
+  };
+
+  const handleOpenConfirmModal = (app: Appointment) => {
+    setConfirmingApp(app);
+    // Find doctor info to prepopulate chamber details if not already set
+    const matchedDoc = doctors.find(d => d.id === app.doctorId || d.name === app.doctorName);
+    const existingCount = appointments.filter(a => a.doctorId === app.doctorId && a.preferredDate === app.preferredDate && a.status === 'Confirmed').length;
+    const nextSerial = String(existingCount + 1).padStart(2, '0');
+
+    setConfSerialNo(app.serialNo !== undefined && app.serialNo !== '' ? app.serialNo : nextSerial);
+    setConfRoomNo(app.assignedRoomNo !== undefined && app.assignedRoomNo !== '' ? app.assignedRoomNo : (matchedDoc?.chamberRoomNo || ''));
+    setConfFloor(app.assignedFloor !== undefined && app.assignedFloor !== '' ? app.assignedFloor : (matchedDoc?.chamberFloor || ''));
+    setConfBuilding(app.assignedBuilding !== undefined && app.assignedBuilding !== '' ? app.assignedBuilding : (matchedDoc?.chamberBuildingStand || ''));
+    setConfVisitingTime(app.confirmedVisitingTime !== undefined && app.confirmedVisitingTime !== '' ? app.confirmedVisitingTime : (matchedDoc?.visitingTime || ''));
+    setConfAdminNotes(app.adminNotes || '');
+  };
+
+  const handleConfirmAppointmentSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!confirmingApp) return;
+    setConfSubmitting(true);
+    try {
+      const confirmData = {
+        bookingCode: confirmingApp.id,
+        serialNo: confSerialNo.trim(),
+        assignedRoomNo: confRoomNo.trim(),
+        assignedFloor: confFloor.trim(),
+        assignedBuilding: confBuilding.trim(),
+        confirmedVisitingTime: confVisitingTime.trim(),
+        adminNotes: confAdminNotes.trim() || undefined
+      };
+
+      await confirmAppointment(confirmData);
+      onUpdateAppointmentStatus(confirmingApp.id, 'Confirmed', confirmData);
+      setConfirmingApp(null);
+      setSuccessMsg('সিরিয়াল সফলভাবে অনুমোদিত হয়েছে ও রুম নম্বর বরাদ্দ করা হয়েছে!');
+      setTimeout(() => setSuccessMsg(''), 4000);
+    } catch (err: any) {
+      alert(err.message || 'সিরিয়াল অনুমোদন করতে সমস্যা হয়েছে।');
+    } finally {
+      setConfSubmitting(false);
+    }
+  };
 
   const handleDayCheckbox = (day: string) => {
     setDocVisitingDays((prev) =>
@@ -394,6 +557,10 @@ export default function AdminDashboard({
     setDocDesignation(doc.designation);
     setDocWorkplace(doc.workplace);
     setDocChamberAddress(doc.chamberAddress);
+    setDocChamberRoomNo(doc.chamberRoomNo || '৩০২');
+    setDocChamberFloor(doc.chamberFloor || '৩য় তলা');
+    setDocChamberBuildingStand(doc.chamberBuildingStand || 'মেইন ভবন');
+    setDocPsPhone(doc.psPhone || '');
     setDocVisitingDays(doc.visitingDays);
     setDocVisitingTime(doc.visitingTime);
     setDocFeesNew(doc.feesNew.toString());
@@ -424,6 +591,10 @@ export default function AdminDashboard({
     setDocDesignation('');
     setDocWorkplace('');
     setDocChamberAddress('');
+    setDocChamberRoomNo('৩০২');
+    setDocChamberFloor('৩য় তলা');
+    setDocChamberBuildingStand('মেইন ভবন, লিফট-১');
+    setDocPsPhone('');
     setDocVisitingDays(['শনিবার', 'রবিবার', 'সোমবার']);
     setDocVisitingTime('বিকাল ৫:০০ - রাত ৮:৩০');
     setDocFeesNew('৮০০');
@@ -484,6 +655,10 @@ export default function AdminDashboard({
       designation: docDesignation,
       workplace: docWorkplace,
       chamberAddress: docChamberAddress,
+      chamberRoomNo: docChamberRoomNo.trim() || 'নির্ধারিত নয়',
+      chamberFloor: docChamberFloor.trim() || 'নিচতলা',
+      chamberBuildingStand: docChamberBuildingStand.trim() || 'মেইন ভবন',
+      psPhone: docPsPhone.trim() || undefined,
       visitingDays: docVisitingDays,
       visitingTime: docVisitingTime,
       feesNew: feesNewNum,
@@ -572,6 +747,18 @@ export default function AdminDashboard({
         >
           <Users className="h-4 w-4" />
           <span>ডাক্তার তালিকা ও নতুন যোগ ({doctors.length})</span>
+        </button>
+        <button
+          onClick={() => setSubTab('reviews')}
+          className={`flex items-center gap-2 border-b-2 px-5 py-2.5 text-xs font-bold transition cursor-pointer ${
+            subTab === 'reviews'
+              ? 'border-[#0284C7] text-[#0284C7]'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
+          }`}
+          id="admin-subtab-reviews-btn"
+        >
+          <Star className="h-4 w-4 text-amber-500" />
+          <span>রিভিউ ও রেটিং ({reviewsList.length})</span>
         </button>
         {currentAdmin?.role === 'super_admin' && (
           <button
@@ -705,17 +892,17 @@ export default function AdminDashboard({
                           <div className="flex items-center justify-center gap-1.5">
                             {/* Confirm Button */}
                             <button
-                              onClick={() => onUpdateAppointmentStatus(app.id, 'Confirmed')}
-                              disabled={app.status === 'Confirmed'}
-                              className={`flex h-7 w-7 items-center justify-center rounded-md border transition ${
+                              onClick={() => handleOpenConfirmModal(app)}
+                              className={`flex items-center gap-1 rounded-md px-2 py-1 border transition text-xs font-bold ${
                                 app.status === 'Confirmed'
-                                  ? 'bg-slate-50 border-slate-100 text-slate-300 cursor-not-allowed'
-                                  : 'border-emerald-200 bg-white text-emerald-600 hover:bg-emerald-50 cursor-pointer'
+                                  ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 cursor-pointer'
+                                  : 'border-emerald-300 bg-emerald-600 text-white hover:bg-emerald-700 cursor-pointer shadow-sm'
                               }`}
-                              title="Confirm Appointment"
+                              title={app.status === 'Confirmed' ? "সিরিয়াল ও রুম পরিবর্তন করুন" : "সিরিয়াল অনুমোদন ও রুম বরাদ্দ করুন"}
                               id={`admin-confirm-${app.id}`}
                             >
                               <Check className="h-3.5 w-3.5 stroke-[2.5]" />
+                              <span>{app.status === 'Confirmed' ? `রুম: ${app.assignedRoomNo || 'নির্ধারিত'} (${app.serialNo || '০১'})` : 'অনুমোদন ও রুম দিন'}</span>
                             </button>
 
                             {/* Cancel Button */}
@@ -888,13 +1075,77 @@ export default function AdminDashboard({
                   </div>
                 </div>
 
+                {/* Chamber Room, Floor, Building */}
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-2.5 space-y-2">
+                  <label className="text-[11px] font-bold text-slate-700 block">
+                    চেম্বার অবস্থান ও রুম নির্দেশিকা (রোগীদের সিরিয়ালে দেখানোর জন্য)
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-500">রুম নম্বর *</label>
+                      <input
+                        type="text"
+                        placeholder="যেমন: ৩০২"
+                        value={docChamberRoomNo}
+                        onChange={(e) => setDocChamberRoomNo(e.target.value)}
+                        className="w-full rounded border border-slate-200 py-1.5 px-2 text-xs font-bold text-slate-800 bg-white focus:outline-none focus:border-[#0284C7]"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-500">ফ্লোর / কত তলা *</label>
+                      <input
+                        type="text"
+                        placeholder="যেমন: ৩য় তলা"
+                        value={docChamberFloor}
+                        onChange={(e) => setDocChamberFloor(e.target.value)}
+                        className="w-full rounded border border-slate-200 py-1.5 px-2 text-xs font-bold text-slate-800 bg-white focus:outline-none focus:border-[#0284C7]"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-500">বিল্ডিং / স্ট্যান্ড</label>
+                      <input
+                        type="text"
+                        placeholder="যেমন: মেইন ভবন"
+                        value={docChamberBuildingStand}
+                        onChange={(e) => setDocChamberBuildingStand(e.target.value)}
+                        className="w-full rounded border border-slate-200 py-1.5 px-2 text-xs font-bold text-slate-800 bg-white focus:outline-none focus:border-[#0284C7]"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Doctor PS Phone - ADMIN ONLY (SENSITIVE) */}
+                <div className="flex flex-col gap-1 rounded-lg border border-amber-200 bg-amber-50/50 p-2.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[11px] font-bold text-amber-900 flex items-center gap-1">
+                      <Phone className="h-3.5 w-3.5 text-amber-700" />
+                      <span>ডাক্তারের পিএস / সহকারীর মোবাইল নম্বর</span>
+                    </label>
+                    <span className="inline-flex items-center gap-1 rounded bg-amber-200/80 px-1.5 py-0.5 text-[9px] font-black text-amber-900">
+                      <Lock className="h-2.5 w-2.5" />
+                      <span>গোপন (শুধুমাত্র অ্যাডমিন)</span>
+                    </span>
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="যেমন: 01711223344"
+                    value={docPsPhone}
+                    onChange={(e) => setDocPsPhone(e.target.value)}
+                    className="w-full rounded-md border border-amber-300 py-1.5 px-2.5 text-xs font-bold text-slate-800 bg-white focus:outline-none focus:border-amber-500"
+                    id="admin-doc-ps-phone"
+                  />
+                  <p className="text-[9px] text-amber-800 font-medium">
+                    * এই নম্বরটি সাধারণ রোগীদের দেখানো হবে না। এটি শুধুমাত্র অ্যাডমিনদের জরুরি প্রয়োজনে ব্যবহারের জন্য সংরক্ষিত থাকবে।
+                  </p>
+                </div>
+
                 {/* Chamber Room / Address */}
                 <div className="flex flex-col gap-1">
-                  <label className="text-[11px] font-bold text-slate-500">চেম্বার কক্ষ ও ঠিকানা *</label>
+                  <label className="text-[11px] font-bold text-slate-500">চেম্বার বিস্তারিত ঠিকানা *</label>
                   <input
                     type="text"
                     required
-                    placeholder="যেমন: কক্ষ ৩১০, পপুলার ডায়াগনস্টিক, রাজশাহী"
+                    placeholder="যেমন: পপুলার ডায়াগনস্টিক সেন্টার, রাজশাহী"
                     value={docChamberAddress}
                     onChange={(e) => setDocChamberAddress(e.target.value)}
                     className="w-full rounded-lg border border-slate-200 py-2 px-3 text-xs font-bold text-slate-800 bg-white focus:outline-none focus:border-[#0284C7]"
@@ -1060,10 +1311,10 @@ export default function AdminDashboard({
                   <thead>
                     <tr className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200">
                       <th className="p-3 text-[11px]">ডাক্তার তথ্য</th>
-                      <th className="p-3 text-[11px]">BM&DC রেজিঃ</th>
+                      <th className="p-3 text-[11px]">চেম্বার অবস্থান ও রুম</th>
+                      <th className="p-3 text-[11px]">পিএস এর মোবাইল (গোপন)</th>
                       <th className="p-3 text-[11px]">বিশেষজ্ঞতা</th>
                       <th className="p-3 text-[11px]">ভিজিট ফি</th>
-                      <th className="p-3 text-center text-[11px]">অগ্রাধিকার</th>
                       <th className="p-3 text-center text-[11px]">অ্যাকশন</th>
                     </tr>
                   </thead>
@@ -1081,9 +1332,25 @@ export default function AdminDashboard({
                           </div>
                         </td>
 
-                        {/* BM&DC ID */}
-                        <td className="p-3 font-mono text-slate-600 font-bold">
-                          {doc.bmdc ? doc.bmdc : <span className="text-slate-400 font-sans font-bold text-[10px]">প্রদান করা হয়নি</span>}
+                        {/* Chamber Location */}
+                        <td className="p-3">
+                          <p className="font-bold text-slate-800">{doc.facility}</p>
+                          <p className="text-[11px] text-[#0284C7] font-bold mt-0.5">
+                            রুম: {doc.chamberRoomNo || 'নির্ধারিত নয়'} • {doc.chamberFloor || 'নিচতলা'}
+                          </p>
+                          <p className="text-[10px] text-slate-400 font-medium">{doc.chamberBuildingStand || 'মেইন ভবন'}</p>
+                        </td>
+
+                        {/* Private PS Phone */}
+                        <td className="p-3">
+                          {doc.psPhone ? (
+                            <div className="flex items-center gap-1.5 font-mono text-xs font-bold text-amber-800 bg-amber-50 border border-amber-200/60 rounded px-2 py-1 w-max">
+                              <Lock className="h-3 w-3 text-amber-600 shrink-0" />
+                              <span>{doc.psPhone}</span>
+                            </div>
+                          ) : (
+                            <span className="text-slate-300 font-bold text-[10px]">দেওয়া হয়নি</span>
+                          )}
                         </td>
 
                         {/* Specialty */}
@@ -1095,9 +1362,6 @@ export default function AdminDashboard({
 
                         {/* Fee */}
                         <td className="p-3 font-bold text-[#0D9488]">৳ {doc.feesNew}</td>
-
-                        {/* Priority Index */}
-                        <td className="p-3 text-center font-mono font-bold text-slate-500">{doc.priorityIndex}</td>
 
                         {/* Actions */}
                         <td className="p-3">
@@ -1134,6 +1398,148 @@ export default function AdminDashboard({
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* SUBTAB: Reviews & Ratings Management */}
+      {subTab === 'reviews' && (
+        <div className="space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                <Star className="h-4 w-4 text-amber-500 fill-amber-500" />
+                <span>রোগীদের রিভিউ ও রেটিং ব্যবস্থাপনা</span>
+              </h2>
+              <p className="text-[10px] text-slate-400 mt-0.5 font-bold">
+                রোগীদের দেওয়া রিভিউ অনুমোদন করুন অথবা চিকিৎসকের প্রোফাইলে নতুন রিভিউ সংযোজন ও নিয়ন্ত্রণ করুন।
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                setNewRevDoctorId(doctors[0]?.id || '');
+                setShowAddReviewModal(true);
+              }}
+              className="flex items-center gap-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 px-3.5 py-2 text-xs font-bold text-white transition cursor-pointer shadow-sm self-start sm:self-auto"
+              id="admin-add-review-btn"
+            >
+              <PlusCircle className="h-4 w-4" />
+              <span>নতুন রিভিউ লিখুন</span>
+            </button>
+          </div>
+
+          {reviewsLoading ? (
+            <div className="flex items-center justify-center py-12 text-slate-400 text-xs font-bold gap-2">
+              <Loader2 className="h-5 w-5 animate-spin text-[#0284C7]" />
+              <span>রিভিউ তালিকা লোড হচ্ছে...</span>
+            </div>
+          ) : (
+            <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="border-b border-slate-200 bg-slate-50 text-slate-500 font-bold">
+                    <th className="p-3 text-[11px]">ডাক্তার</th>
+                    <th className="p-3 text-[11px]">রোগীর নাম</th>
+                    <th className="p-3 text-[11px]">রেটিং ও রিভিউ মন্তব্য</th>
+                    <th className="p-3 text-[11px]">তারিখ</th>
+                    <th className="p-3 text-[11px]">স্ট্যাটাস</th>
+                    <th className="p-3 text-center text-[11px]">অ্যাকশন</th>
+                  </tr>
+                </thead>
+                <tbody className="text-slate-700 font-semibold text-[11px]">
+                  {reviewsList.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="p-8 text-center text-slate-400 font-bold">
+                        কোন রিভিউ পাওয়া যায়নি। উপরের বাটনে ক্লিক করে নতুন রিভিউ যুক্ত করতে পারেন।
+                      </td>
+                    </tr>
+                  ) : (
+                    reviewsList.map((rev) => {
+                      const matchedDoc = doctors.find((d) => d.id === rev.doctorId);
+                      return (
+                        <tr key={rev.id} className="border-b border-slate-150 hover:bg-slate-50/50">
+                          {/* Doctor */}
+                          <td className="p-3">
+                            <p className="font-bold text-slate-900">{matchedDoc?.name || rev.doctorId}</p>
+                            <p className="text-[10px] text-slate-400 font-medium">{matchedDoc?.specialty || ''}</p>
+                          </td>
+
+                          {/* Patient */}
+                          <td className="p-3">
+                            <p className="font-bold text-slate-800">{rev.patientName}</p>
+                          </td>
+
+                          {/* Rating & Review */}
+                          <td className="p-3 max-w-md">
+                            <div className="flex items-center gap-1 mb-1 text-amber-500">
+                              {Array.from({ length: 5 }).map((_, i) => (
+                                <Star
+                                  key={i}
+                                  className={`h-3 w-3 ${
+                                    i < rev.rating ? 'fill-amber-400 text-amber-400' : 'text-slate-200'
+                                  }`}
+                                />
+                              ))}
+                              <span className="text-[10px] font-black text-slate-700 ml-1">
+                                {rev.rating}.0
+                              </span>
+                            </div>
+                            <p className="text-slate-600 leading-relaxed text-xs bg-slate-50 p-2 rounded border border-slate-100">
+                              "{rev.reviewText}"
+                            </p>
+                          </td>
+
+                          {/* Date */}
+                          <td className="p-3 text-[10px] text-slate-400 font-mono">
+                            {new Date(rev.createdAt).toLocaleDateString('bn-BD', {
+                              year: 'numeric',
+                              month: 'short',
+                              day: 'numeric',
+                            })}
+                          </td>
+
+                          {/* Status */}
+                          <td className="p-3">
+                            {rev.isApproved ? (
+                              <span className="inline-flex items-center gap-1 rounded bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700 border border-emerald-200/50">
+                                <Check className="h-3 w-3" />
+                                <span>অনুমোদিত</span>
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 rounded bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700 border border-amber-200/50">
+                                <span>অপেক্ষমান (Pending)</span>
+                              </span>
+                            )}
+                          </td>
+
+                          {/* Action Buttons */}
+                          <td className="p-3 text-center">
+                            <div className="flex items-center justify-center gap-1.5">
+                              {!rev.isApproved && (
+                                <button
+                                  onClick={() => handleApproveReview(rev.id)}
+                                  className="flex h-7 w-7 items-center justify-center rounded-md border border-emerald-200 bg-white text-emerald-600 hover:bg-emerald-50 cursor-pointer"
+                                  title="রিভিউ অনুমোদন করুন"
+                                >
+                                  <Check className="h-3.5 w-3.5" />
+                                </button>
+                              )}
+                              <button
+                                onClick={() => handleDeleteReview(rev.id)}
+                                className="flex h-7 w-7 items-center justify-center rounded-md border border-rose-200 bg-white text-rose-600 hover:bg-rose-50 cursor-pointer"
+                                title="রিভিউ মুছে ফেলুন"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
 
@@ -1924,6 +2330,241 @@ export default function AdminDashboard({
                   className="rounded-lg bg-[#0284C7] hover:bg-[#0274af] px-4 py-2 text-white font-bold transition cursor-pointer"
                 >
                   <span>সংরক্ষণ করুন</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Appointment Confirmation & Location Assignment Modal */}
+      {confirmingApp && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4 animate-in fade-in duration-100">
+          <div className="w-full max-w-lg bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-slate-150 px-6 py-4 bg-emerald-50/50">
+              <div className="flex items-center gap-2">
+                <div className="h-8 w-8 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700 font-bold">
+                  <Check className="h-4 w-4 stroke-[3]" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-slate-900 text-sm">সিরিয়াল অনুমোদন ও রুম নম্বর বরাদ্দ</h3>
+                  <p className="text-[10px] text-slate-500 font-bold">বুকিং আইডি: {confirmingApp.id}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setConfirmingApp(null)}
+                className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700 cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleConfirmAppointmentSubmit} className="p-6 space-y-4 text-xs font-semibold">
+              {/* Patient and Doctor Snapshot */}
+              <div className="grid grid-cols-2 gap-3 p-3 rounded-xl bg-slate-50 border border-slate-200/80">
+                <div>
+                  <span className="block text-[10px] font-bold text-slate-400">রোগীর নাম</span>
+                  <span className="font-bold text-slate-800 text-xs">{confirmingApp.patientName}</span>
+                  <span className="block text-[10px] text-slate-500">{confirmingApp.patientMobile}</span>
+                </div>
+                <div>
+                  <span className="block text-[10px] font-bold text-slate-400">ডাক্তার ও তারিখ</span>
+                  <span className="font-bold text-slate-800 text-xs">{confirmingApp.doctorName}</span>
+                  <span className="block text-[10px] text-slate-500">{confirmingApp.preferredDate}</span>
+                </div>
+              </div>
+
+              {/* Serial and Room */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[#0284C7] mb-1 font-bold">নির্ধারিত সিরিয়াল নম্বর *</label>
+                  <input
+                    type="text"
+                    required
+                    value={confSerialNo}
+                    onChange={(e) => setConfSerialNo(e.target.value)}
+                    className="w-full rounded-lg border border-slate-300 bg-white py-2 px-3 text-xs font-bold text-slate-800 outline-none focus:border-[#0284C7] focus:ring-1 focus:ring-[#0284C7]"
+                    placeholder="যেমন: ০১"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[#0284C7] mb-1 font-bold">রুম নম্বর (Room No) *</label>
+                  <input
+                    type="text"
+                    required
+                    value={confRoomNo}
+                    onChange={(e) => setConfRoomNo(e.target.value)}
+                    className="w-full rounded-lg border border-slate-300 bg-white py-2 px-3 text-xs font-bold text-slate-800 outline-none focus:border-[#0284C7] focus:ring-1 focus:ring-[#0284C7]"
+                    placeholder="যেমন: ৩১০"
+                  />
+                </div>
+              </div>
+
+              {/* Floor and Building/Stand */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-600 mb-1 font-bold">ফ্লোর / কত তলা (Floor) *</label>
+                  <input
+                    type="text"
+                    required
+                    value={confFloor}
+                    onChange={(e) => setConfFloor(e.target.value)}
+                    className="w-full rounded-lg border border-slate-300 bg-white py-2 px-3 text-xs font-bold text-slate-800 outline-none focus:border-[#0284C7]"
+                    placeholder="যেমন: ৩য় তলা"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-600 mb-1 font-bold">বিল্ডিং / স্ট্যান্ড / লিফট</label>
+                  <input
+                    type="text"
+                    value={confBuilding}
+                    onChange={(e) => setConfBuilding(e.target.value)}
+                    className="w-full rounded-lg border border-slate-300 bg-white py-2 px-3 text-xs font-bold text-slate-800 outline-none focus:border-[#0284C7]"
+                    placeholder="যেমন: মেইন ভবন, লিফট-১"
+                  />
+                </div>
+              </div>
+
+              {/* Visiting Time */}
+              <div>
+                <label className="block text-slate-600 mb-1 font-bold">রিপোর্টিং / উপস্থিতির সময়সূচী</label>
+                <input
+                  type="text"
+                  required
+                  value={confVisitingTime}
+                  onChange={(e) => setConfVisitingTime(e.target.value)}
+                  className="w-full rounded-lg border border-slate-300 bg-white py-2 px-3 text-xs font-bold text-slate-800 outline-none focus:border-[#0284C7]"
+                  placeholder="যেমন: বিকাল ৫:৩০ মিনিট"
+                />
+              </div>
+
+              {/* Admin Note */}
+              <div>
+                <label className="block text-slate-600 mb-1 font-bold">রোগীর জন্য বিশেষ নির্দেশিকা (ঐচ্ছিক)</label>
+                <input
+                  type="text"
+                  value={confAdminNotes}
+                  onChange={(e) => setConfAdminNotes(e.target.value)}
+                  className="w-full rounded-lg border border-slate-200 bg-slate-50/50 py-2 px-3 text-xs font-bold text-slate-800 outline-none focus:border-[#0284C7] focus:bg-white"
+                  placeholder="যেমন: পূর্বের সকল প্রেসক্রিপশন ও রিপোর্ট সাথে রাখবেন।"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-4 border-t border-slate-150">
+                <button
+                  type="button"
+                  onClick={() => setConfirmingApp(null)}
+                  className="rounded-lg border border-slate-200 px-4 py-2 text-slate-600 hover:bg-slate-50 transition cursor-pointer"
+                >
+                  বাতিল
+                </button>
+                <button
+                  type="submit"
+                  disabled={confSubmitting}
+                  className="rounded-lg bg-emerald-600 hover:bg-emerald-700 px-5 py-2 text-white font-bold transition cursor-pointer shadow flex items-center gap-1.5"
+                >
+                  {confSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4 stroke-[3]" />}
+                  <span>কনফার্ম ও সিরিয়াল প্রদান</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Admin Add Review Modal */}
+      {showAddReviewModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4 animate-in fade-in duration-100">
+          <div className="w-full max-w-md bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-slate-150 px-6 py-4 bg-amber-50/50">
+              <div className="flex items-center gap-2">
+                <Star className="h-5 w-5 text-amber-500 fill-amber-500" />
+                <h3 className="font-extrabold text-slate-900 text-sm">ডাক্তারের জন্য নতুন রিভিউ লিখুন</h3>
+              </div>
+              <button
+                onClick={() => setShowAddReviewModal(false)}
+                className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700 cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddReviewSubmit} className="p-6 space-y-4 text-xs font-semibold">
+              <div>
+                <label className="block text-slate-700 mb-1 font-bold">ডাক্তার নির্বাচন করুন *</label>
+                <select
+                  value={newRevDoctorId}
+                  onChange={(e) => setNewRevDoctorId(e.target.value)}
+                  className="w-full rounded-lg border border-slate-300 bg-white py-2 px-3 text-xs font-bold text-slate-800 outline-none focus:border-[#0284C7] cursor-pointer"
+                >
+                  {doctors.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.name} ({d.specialty})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-slate-700 mb-1 font-bold">রোগী / রিভিউকারীর নাম *</label>
+                <input
+                  type="text"
+                  required
+                  value={newRevPatientName}
+                  onChange={(e) => setNewRevPatientName(e.target.value)}
+                  className="w-full rounded-lg border border-slate-300 bg-white py-2 px-3 text-xs font-bold text-slate-800 outline-none focus:border-[#0284C7]"
+                  placeholder="যেমন: তানভীর আহমেদ"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-700 mb-1 font-bold">রেটিং (স্টার) *</label>
+                <div className="flex items-center gap-2">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <button
+                      key={star}
+                      type="button"
+                      onClick={() => setNewRevRating(star)}
+                      className="p-1 cursor-pointer transition hover:scale-110"
+                    >
+                      <Star
+                        className={`h-6 w-6 ${
+                          star <= newRevRating ? 'text-amber-400 fill-amber-400' : 'text-slate-200'
+                        }`}
+                      />
+                    </button>
+                  ))}
+                  <span className="ml-2 font-bold text-slate-700">{newRevRating}.0 স্টার</span>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-slate-700 mb-1 font-bold">রোগীর রিভিউ ও মন্তব্য *</label>
+                <textarea
+                  rows={3}
+                  required
+                  value={newRevText}
+                  onChange={(e) => setNewRevText(e.target.value)}
+                  className="w-full rounded-lg border border-slate-300 bg-white py-2 px-3 text-xs font-semibold text-slate-800 outline-none focus:border-[#0284C7]"
+                  placeholder="ডাক্তারের ব্যবহার, চিকিৎসা ও পরামর্শ সম্পর্কে মন্তব্য লিখুন..."
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-4 border-t border-slate-150">
+                <button
+                  type="button"
+                  onClick={() => setShowAddReviewModal(false)}
+                  className="rounded-lg border border-slate-200 px-4 py-2 text-slate-600 hover:bg-slate-50 transition cursor-pointer"
+                >
+                  বাতিল
+                </button>
+                <button
+                  type="submit"
+                  disabled={newRevSubmitting}
+                  className="rounded-lg bg-amber-500 hover:bg-amber-600 px-5 py-2 text-white font-bold transition cursor-pointer shadow flex items-center gap-1.5"
+                >
+                  {newRevSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Star className="h-4 w-4 fill-white" />}
+                  <span>রিভিউ পোস্ট করুন</span>
                 </button>
               </div>
             </form>

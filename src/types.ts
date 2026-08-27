@@ -53,8 +53,25 @@ export interface Doctor {
   facilityAddress?: string;
   facilityDistrictId?: string;
   chamberRoomNo?: string;
+  chamberFloor?: string; // e.g., "৩য় তলা"
+  chamberBuildingStand?: string; // e.g., "মেইন বিল্ডিং, লিফট-১ এর পাশে"
+  psPhone?: string; // Doctor's Assistant/PS secret mobile number (ADMIN ONLY)
   rating?: number;
   reviewCount?: number;
+}
+
+export interface Review {
+  id: string;
+  doctorId: string;
+  doctorName?: string;
+  patientName: string;
+  patientPhone?: string; // Private / only for verification, not displayed publicly
+  rating: number;
+  comment?: string;
+  reviewText?: string;
+  isVerifiedPatient?: boolean;
+  isApproved?: boolean;
+  createdAt: string;
 }
 
 export interface Appointment {
@@ -74,6 +91,8 @@ export interface Appointment {
   status: 'Pending' | 'Confirmed' | 'Cancelled' | 'Rejected';
   serialNo?: string;
   assignedRoomNo?: string;
+  assignedFloor?: string; // e.g., "৩য় তলা"
+  assignedBuilding?: string; // e.g., "বিল্ডিং-বি, পূর্ব গেট স্ট্যান্ড"
   confirmedVisitingTime?: string;
   rejectionReason?: string;
   adminNotes?: string;

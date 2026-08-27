@@ -64,6 +64,7 @@ export default function Header({
               className="bg-transparent font-bold text-slate-800 outline-none cursor-pointer text-xs"
               id="district-selector"
             >
+              <option value="সকল জেলা">সকল জেলা (All)</option>
               {renderedDistricts.map((dist) => (
                 <option key={dist.id} value={dist.name}>
                   {dist.name}
@@ -151,6 +152,7 @@ export default function Header({
               className="bg-transparent font-bold text-slate-800 outline-none cursor-pointer text-xs"
               id="mobile-district-selector"
             >
+              <option value="সকল জেলা">সকল জেলা (All)</option>
               {renderedDistricts.map((dist) => (
                 <option key={dist.id} value={dist.name}>
                   {dist.name}

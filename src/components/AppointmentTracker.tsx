@@ -77,6 +77,10 @@ export default function AppointmentTracker({ appointments }: AppointmentTrackerP
               )
             ),
             chambers (
+              room_no,
+              floor,
+              building_stand,
+              visiting_time,
               facilities (
                 name,
                 area_address
@@ -109,8 +113,10 @@ export default function AppointmentTracker({ appointments }: AppointmentTrackerP
             preferredDate: app.preferred_date,
             status: app.status as Appointment['status'],
             serialNo: app.serial_no || undefined,
-            assignedRoomNo: app.assigned_room_no || undefined,
-            confirmedVisitingTime: app.confirmed_visiting_time || undefined,
+            assignedRoomNo: app.assigned_room_no || ch?.room_no || undefined,
+            assignedFloor: app.assigned_floor || ch?.floor || undefined,
+            assignedBuilding: app.assigned_building || ch?.building_stand || undefined,
+            confirmedVisitingTime: app.confirmed_visiting_time || ch?.visiting_time || undefined,
             rejectionReason: app.rejection_reason || undefined,
             adminNotes: app.admin_notes || undefined,
             createdAt: app.created_at,
@@ -345,34 +351,45 @@ export default function AppointmentTracker({ appointments }: AppointmentTrackerP
                             
                             {/* If Active / Confirmed Upcoming */}
                             {lifecycle.type === 'active' && (
-                              <div className="rounded-lg bg-emerald-50/40 border border-emerald-100 p-3.5 space-y-2.5 shadow-sm">
-                                <div className="grid grid-cols-2 gap-2 border-b border-emerald-100 pb-2.5">
-                                  <div>
-                                    <span className="text-[9px] font-bold text-emerald-600 uppercase tracking-wider">সিরিয়াল নম্বর</span>
-                                    <p className="text-lg font-black text-emerald-800">{app.serialNo || 'নির্ধারিত হয়নি'}</p>
+                              <div className="rounded-lg bg-emerald-50/50 border border-emerald-200 p-4 space-y-3 shadow-xs">
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 border-b border-emerald-150 pb-3 text-center">
+                                  <div className="p-2 rounded bg-white border border-emerald-100">
+                                    <span className="text-[9px] font-bold text-emerald-600 uppercase tracking-wider block">সিরিয়াল নং</span>
+                                    <p className="text-base font-black text-emerald-800">#{app.serialNo || 'নির্ধারিত'}</p>
                                   </div>
-                                  <div>
-                                    <span className="text-[9px] font-bold text-emerald-600 uppercase tracking-wider">রুম নম্বর</span>
-                                    <p className="text-lg font-black text-emerald-800">{app.assignedRoomNo || 'নির্ধারিত হয়নি'}</p>
+                                  <div className="p-2 rounded bg-white border border-emerald-100">
+                                    <span className="text-[9px] font-bold text-emerald-600 uppercase tracking-wider block">রুম নম্বর</span>
+                                    <p className="text-base font-black text-emerald-800">{app.assignedRoomNo || 'নির্ধারিত নয়'}</p>
+                                  </div>
+                                  <div className="p-2 rounded bg-white border border-emerald-100">
+                                    <span className="text-[9px] font-bold text-emerald-600 uppercase tracking-wider block">ফ্লোর / তলা</span>
+                                    <p className="text-xs font-black text-emerald-800 mt-1">{app.assignedFloor || 'নিচতলা'}</p>
+                                  </div>
+                                  <div className="p-2 rounded bg-white border border-emerald-100">
+                                    <span className="text-[9px] font-bold text-emerald-600 uppercase tracking-wider block">বিল্ডিং / স্ট্যান্ড</span>
+                                    <p className="text-[11px] font-black text-emerald-800 mt-1 truncate" title={app.assignedBuilding || 'মেইন ভবন'}>
+                                      {app.assignedBuilding || 'মেইন ভবন'}
+                                    </p>
                                   </div>
                                 </div>
                                 <div className="space-y-1 text-[11px] text-slate-600 font-bold">
                                   <p className="flex justify-between">
                                     <span>রোগীর নাম:</span>
-                                    <span className="text-slate-800">{app.patientName}</span>
+                                    <span className="text-slate-800">{app.patientName} ({app.patientAge} বছর)</span>
                                   </p>
                                   <p className="flex justify-between">
-                                    <span>রোগীর বয়স:</span>
-                                    <span className="text-slate-800">{app.patientAge} বছর</span>
-                                  </p>
-                                  <p className="flex justify-between">
-                                    <span>ভিজিটের সময়:</span>
-                                    <span className="text-indigo-700 font-bold">{app.confirmedVisitingTime || 'চেম্বার সময়সূচী অনুযায়ী'}</span>
+                                    <span>ভিজিটের সময়সূচী:</span>
+                                    <span className="text-indigo-700 font-extrabold">{app.confirmedVisitingTime || 'চেম্বার সময়সূচী অনুযায়ী'}</span>
                                   </p>
                                   <p className="flex justify-between text-[#0D9488]">
                                     <span>সিরিয়ালের তারিখ:</span>
-                                    <span>{app.preferredDate}</span>
+                                    <span className="font-extrabold">{app.preferredDate}</span>
                                   </p>
+                                  {app.adminNotes && (
+                                    <p className="p-2 rounded bg-white/80 border border-emerald-100 text-[10px] text-slate-600 font-medium mt-1">
+                                      <strong className="text-emerald-700">বিশেষ দ্রষ্টব্য:</strong> {app.adminNotes}
+                                    </p>
+                                  )}
                                 </div>
                               </div>
                             )}
