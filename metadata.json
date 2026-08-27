@@ -1,0 +1,6 @@
+{
+  "name": "Doctor Serial Tracker",
+  "description": "A responsive healthcare appointment and doctor serial tracking portal with admin and user interfaces.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
