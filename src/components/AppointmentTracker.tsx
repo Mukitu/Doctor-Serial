@@ -150,42 +150,41 @@ export default function AppointmentTracker({ appointments }: AppointmentTrackerP
 
   // Helper to determine the lifecycle status of an appointment
   const getSmartLifecycle = (app: Appointment) => {
-    const todayStr = getTodayStr();
-    
     if (app.status === 'Pending') {
       return {
         type: 'pending' as const,
         titleBn: 'অপেক্ষমান',
-        badgeClass: 'bg-amber-50 border border-amber-200 text-amber-700',
+        badgeClass: 'bg-amber-50 border border-amber-200 text-amber-700 font-extrabold',
         message: 'আপনার রিকোয়েস্টটি পর্যালোচনায় আছে। আমাদের প্রতিনিধি চেম্বার থেকে সিরিয়াল নম্বর কনফার্ম করছেন।',
         bgGradient: 'from-amber-50/50 to-amber-100/10'
       };
     }
     
     if (app.status === 'Confirmed') {
-      if (app.preferredDate >= todayStr) {
-        return {
-          type: 'active' as const,
-          titleBn: 'নিশ্চিত ও সক্রিয়',
-          badgeClass: 'bg-emerald-50 border border-emerald-200 text-emerald-700',
-          message: 'চেম্বার থেকে আপনার কাঙ্ক্ষিত সিরিয়ালটি সফলভাবে নিশ্চিত করা হয়েছে।',
-          bgGradient: 'from-emerald-50/50 to-emerald-100/10'
-        };
-      } else {
-        return {
-          type: 'completed' as const,
-          titleBn: 'সেবা সম্পন্ন (অতীত ইতিহাস)',
-          badgeClass: 'bg-slate-100 border border-slate-300 text-slate-600',
-          message: 'ভিজিট সম্পন্ন হয়েছে',
-          bgGradient: 'from-slate-50/80 to-slate-100/30'
-        };
-      }
+      const serialStr = app.serialNo ? ` #${app.serialNo}` : '';
+      return {
+        type: 'active' as const,
+        titleBn: 'সিরিয়াল কনফার্ম হয়েছে',
+        badgeClass: 'bg-emerald-50 border border-emerald-200 text-emerald-700 font-extrabold',
+        message: `আপনার সিরিয়াল নম্বর${serialStr} সফলভাবে কনফার্ম করা হয়েছে।`,
+        bgGradient: 'from-emerald-50/50 to-emerald-100/10'
+      };
+    }
+
+    if (app.status === 'Completed') {
+      return {
+        type: 'completed' as const,
+        titleBn: 'সেবা সম্পন্ন (অতীত ইতিহাস)',
+        badgeClass: 'bg-slate-100 border border-slate-300 text-slate-600 font-bold',
+        message: 'ভিজিট সম্পন্ন হয়েছে',
+        bgGradient: 'from-slate-50/80 to-slate-100/30'
+      };
     }
 
     return {
       type: 'rejected' as const,
       titleBn: 'বাতিল',
-      badgeClass: 'bg-rose-50 border border-rose-200 text-rose-700',
+      badgeClass: 'bg-rose-50 border border-rose-200 text-rose-700 font-bold',
       message: app.rejectionReason || 'অনিবার্য কারণবশত আপনার সিরিয়াল রিকোয়েস্টটি বাতিল করা হয়েছে।',
       bgGradient: 'from-rose-50/50 to-rose-100/10'
     };
@@ -336,9 +335,23 @@ export default function AppointmentTracker({ appointments }: AppointmentTrackerP
                                   <Building className="h-3.5 w-3.5 text-slate-400" />
                                   <span>{app.facilityName || 'পপুলার ডায়াগনস্টিক সেন্টার, রাজশাহী'}</span>
                                 </p>
-                                <p className="text-[10px] text-slate-400 pl-5">
-                                  {app.facilityAddress || 'লক্ষ্মীপুর, রাজশাহী'}
-                                </p>
+                                {app.facilityAddress && (
+                                  <p className="text-[10px] text-slate-400 pl-5">
+                                    {app.facilityAddress}
+                                  </p>
+                                )}
+                                {(app.assignedRoomNo || app.assignedFloor || app.assignedBuilding) && (
+                                  <div className="mt-2 pt-2 border-t border-slate-100 flex items-center gap-2 flex-wrap">
+                                    <span className="inline-flex items-center gap-1 bg-emerald-100 text-emerald-900 border border-emerald-300 px-2.5 py-0.5 rounded text-[11px] font-black">
+                                      📍 রুম: {app.assignedRoomNo || '৩০২'}
+                                    </span>
+                                    {app.assignedFloor && (
+                                      <span className="text-[10px] font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded">
+                                        {app.assignedFloor}
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
                               </div>
                             </div>
                           </div>
@@ -349,36 +362,36 @@ export default function AppointmentTracker({ appointments }: AppointmentTrackerP
                               <User className="h-3.5 w-3.5 text-indigo-600" /> সিরিয়াল ও রোগীর বিবরণ
                             </h4>
                             
-                            {/* If Active / Confirmed Upcoming */}
+                            {/* If Active / Confirmed */}
                             {lifecycle.type === 'active' && (
                               <div className="rounded-lg bg-emerald-50/50 border border-emerald-200 p-4 space-y-3 shadow-xs">
                                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 border-b border-emerald-150 pb-3 text-center">
-                                  <div className="p-2 rounded bg-white border border-emerald-100">
-                                    <span className="text-[9px] font-bold text-emerald-600 uppercase tracking-wider block">সিরিয়াল নং</span>
-                                    <p className="text-base font-black text-emerald-800">#{app.serialNo || 'নির্ধারিত'}</p>
+                                  <div className="p-2.5 rounded-lg bg-white border border-emerald-200 shadow-2xs">
+                                    <span className="text-[9px] font-extrabold text-emerald-600 uppercase tracking-wider block">কনফার্মড সিরিয়াল</span>
+                                    <p className="text-lg font-black text-emerald-800">#{app.serialNo || 'নির্ধারিত'}</p>
                                   </div>
-                                  <div className="p-2 rounded bg-white border border-emerald-100">
-                                    <span className="text-[9px] font-bold text-emerald-600 uppercase tracking-wider block">রুম নম্বর</span>
-                                    <p className="text-base font-black text-emerald-800">{app.assignedRoomNo || 'নির্ধারিত নয়'}</p>
+                                  <div className="p-2.5 rounded-lg bg-emerald-100/90 border border-emerald-300 shadow-2xs">
+                                    <span className="text-[9px] font-black text-emerald-900 uppercase tracking-wider block">ডাক্তার বসার রুম</span>
+                                    <p className="text-base font-black text-emerald-950">{app.assignedRoomNo || '৩০২'}</p>
                                   </div>
-                                  <div className="p-2 rounded bg-white border border-emerald-100">
-                                    <span className="text-[9px] font-bold text-emerald-600 uppercase tracking-wider block">ফ্লোর / তলা</span>
-                                    <p className="text-xs font-black text-emerald-800 mt-1">{app.assignedFloor || 'নিচতলা'}</p>
+                                  <div className="p-2.5 rounded-lg bg-white border border-emerald-200 shadow-2xs">
+                                    <span className="text-[9px] font-extrabold text-emerald-600 uppercase tracking-wider block">ফ্লোর / তলা</span>
+                                    <p className="text-xs font-black text-emerald-800 mt-1">{app.assignedFloor || '৩য় তলা'}</p>
                                   </div>
-                                  <div className="p-2 rounded bg-white border border-emerald-100">
-                                    <span className="text-[9px] font-bold text-emerald-600 uppercase tracking-wider block">বিল্ডিং / স্ট্যান্ড</span>
+                                  <div className="p-2.5 rounded-lg bg-white border border-emerald-200 shadow-2xs">
+                                    <span className="text-[9px] font-extrabold text-emerald-600 uppercase tracking-wider block">বিল্ডিং / স্থান</span>
                                     <p className="text-[11px] font-black text-emerald-800 mt-1 truncate" title={app.assignedBuilding || 'মেইন ভবন'}>
                                       {app.assignedBuilding || 'মেইন ভবন'}
                                     </p>
                                   </div>
                                 </div>
-                                <div className="space-y-1 text-[11px] text-slate-600 font-bold">
-                                  <p className="flex justify-between">
-                                    <span>রোগীর নাম:</span>
-                                    <span className="text-slate-800">{app.patientName} ({app.patientAge} বছর)</span>
+                                <div className="space-y-1.5 text-[11px] text-slate-700 font-bold">
+                                  <p className="flex justify-between border-b border-emerald-100 pb-1">
+                                    <span className="text-slate-500">রোগীর নাম:</span>
+                                    <span className="text-slate-900 font-extrabold">{app.patientName} ({app.patientAge} বছর)</span>
                                   </p>
-                                  <p className="flex justify-between">
-                                    <span>ভিজিটের সময়সূচী:</span>
+                                  <p className="flex justify-between border-b border-emerald-100 pb-1">
+                                    <span className="text-slate-500">ভিজিটের সময়সূচী:</span>
                                     <span className="text-indigo-700 font-extrabold">{app.confirmedVisitingTime || 'চেম্বার সময়সূচী অনুযায়ী'}</span>
                                   </p>
                                   <p className="flex justify-between text-[#0D9488]">
@@ -386,8 +399,8 @@ export default function AppointmentTracker({ appointments }: AppointmentTrackerP
                                     <span className="font-extrabold">{app.preferredDate}</span>
                                   </p>
                                   {app.adminNotes && (
-                                    <p className="p-2 rounded bg-white/80 border border-emerald-100 text-[10px] text-slate-600 font-medium mt-1">
-                                      <strong className="text-emerald-700">বিশেষ দ্রষ্টব্য:</strong> {app.adminNotes}
+                                    <p className="p-2 rounded bg-white/90 border border-emerald-200 text-[10px] text-slate-700 font-semibold mt-1">
+                                      <strong className="text-emerald-800">বিশেষ দ্রষ্টব্য:</strong> {app.adminNotes}
                                     </p>
                                   )}
                                 </div>

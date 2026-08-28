@@ -481,7 +481,7 @@ export default function App() {
             />
 
             {/* Hero Slot Promo Banner */}
-            <PromoBannerComponent slot="hero" className="my-8 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8" />
+            <PromoBannerComponent slot="home_hero_top" className="my-8 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8" />
 
             {/* Curated Top-Priority Doctors Highlight Grid with Instant Reactive Filtering */}
             <section id="featured-doctors-section" className="py-12 bg-white border-t border-b border-slate-200 scroll-mt-6">
@@ -765,7 +765,7 @@ export default function App() {
       )}
 
       {/* Dynamic Footer Slot Banner */}
-      <PromoBannerComponent slot="footer" className="my-8 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8" />
+      <PromoBannerComponent slot="footer_sticky" className="my-8 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8" />
 
       {/* Sophisticated Footer with Accent colors */}
       <Footer activeTab={activeTab} setActiveTab={handleTabChange} />

@@ -22,9 +22,11 @@ import {
   CheckCircle2,
   Send,
   BookOpen,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Eye,
+  EyeOff
 } from 'lucide-react';
-import { Doctor, Appointment, Specialty, Facility, AdminProfile, District, Review, BlogPost, PromoBanner } from '../types';
+import { Doctor, Appointment, Specialty, Facility, AdminProfile, District, Review, BlogPost, PromoBanner, BannerPlacementSlot } from '../types';
 import { 
   getAdmins, 
   createAdminUser, 
@@ -42,9 +44,15 @@ import {
   getPromoBanners,
   addPromoBanner,
   updatePromoBanner,
+  togglePromoBannerActive,
   deletePromoBanner,
-  updateDoctorStatus
+  uploadBannerImage,
+  updateDoctorStatus,
+  upsertDoctorWithChambers
 } from '../lib/supabase';
+import AdminLayout from './admin/AdminLayout';
+import DoctorFormModal from './admin/DoctorFormModal';
+import { uploadImage } from '../lib/uploadImage';
 
 interface AdminDashboardProps {
   doctors: Doctor[];
@@ -77,9 +85,10 @@ interface AdminDashboardProps {
   onAddSpecialty: (spec: Omit<Specialty, 'id'>) => Promise<void>;
   onUpdateSpecialty: (spec: Specialty) => Promise<void>;
   onDeleteSpecialty: (id: string) => Promise<void>;
+  onSignOut?: () => void;
 }
 
-type AdminSubTab = 'appointments' | 'doctors' | 'reviews' | 'admins' | 'districts' | 'facilities' | 'specialties';
+type AdminSubTab = 'dashboard' | 'appointments' | 'doctors' | 'reviews' | 'admins' | 'districts' | 'facilities' | 'specialties' | 'blogs' | 'banners';
 
 export default function AdminDashboard({
   doctors,
@@ -101,9 +110,11 @@ export default function AdminDashboard({
   onAddSpecialty,
   onUpdateSpecialty,
   onDeleteSpecialty,
+  onSignOut,
 }: AdminDashboardProps) {
-  const [subTab, setSubTab] = useState<AdminSubTab>('appointments');
+  const [subTab, setSubTab] = useState<string>('dashboard');
   const [editingDoctor, setEditingDoctor] = useState<Doctor | null>(null);
+  const [showDoctorModal, setShowDoctorModal] = useState(false);
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [toastMsg, setToastMsg] = useState('');
@@ -131,6 +142,7 @@ export default function AdminDashboard({
 
   // Appointment Confirmation Modal States
   const [confirmingApp, setConfirmingApp] = useState<Appointment | null>(null);
+  const [confFacilityName, setConfFacilityName] = useState('');
   const [confSerialNo, setConfSerialNo] = useState('');
   const [confRoomNo, setConfRoomNo] = useState('');
   const [confFloor, setConfFloor] = useState('');
@@ -190,17 +202,20 @@ export default function AdminDashboard({
   const [blogCategory, setBlogCategory] = useState('');
   const [blogAuthor, setBlogAuthor] = useState('MyDocBD মেডিকেল টিম');
   const [blogIsPublished, setBlogIsPublished] = useState(true);
+  const [blogImageUploading, setBlogImageUploading] = useState(false);
 
   // Banners CRUD States
   const [bannersList, setBannersList] = useState<PromoBanner[]>([]);
   const [bannersLoading, setBannersLoading] = useState(false);
   const [showBannerModal, setShowBannerModal] = useState(false);
   const [editingBanner, setEditingBanner] = useState<PromoBanner | null>(null);
+  const [bannerToDelete, setBannerToDelete] = useState<PromoBanner | null>(null);
   const [bannerTitle, setBannerTitle] = useState('');
   const [bannerImageUrl, setBannerImageUrl] = useState('');
   const [bannerTargetUrl, setBannerTargetUrl] = useState('');
   const [bannerSlot, setBannerSlot] = useState<'hero' | 'directory' | 'sidebar' | 'footer'>('hero');
   const [bannerIsActive, setBannerIsActive] = useState(true);
+  const [bannerImageUploading, setBannerImageUploading] = useState(false);
 
   const loadBlogsList = async () => {
     setBlogsLoading(true);
@@ -559,18 +574,26 @@ export default function AdminDashboard({
           ...editingBanner,
           title: bannerTitle.trim(),
           imageUrl: bannerImageUrl.trim(),
+          banner_image: bannerImageUrl.trim(),
           targetUrl: bannerTargetUrl.trim(),
-          slot: bannerSlot,
-          isActive: bannerIsActive
+          target_url: bannerTargetUrl.trim(),
+          slot: bannerSlot as any,
+          placement_slot: bannerSlot as any,
+          isActive: bannerIsActive,
+          is_active: bannerIsActive
         });
         setToastMsg('ব্যানার সফলভাবে আপডেট করা হয়েছে!');
       } else {
         await addPromoBanner({
           title: bannerTitle.trim(),
           imageUrl: bannerImageUrl.trim(),
+          banner_image: bannerImageUrl.trim(),
           targetUrl: bannerTargetUrl.trim(),
-          slot: bannerSlot,
-          isActive: bannerIsActive
+          target_url: bannerTargetUrl.trim(),
+          slot: bannerSlot as any,
+          placement_slot: bannerSlot as any,
+          isActive: bannerIsActive,
+          is_active: bannerIsActive
         });
         setToastMsg('নতুন ব্যানার সফলভাবে তৈরি করা হয়েছে!');
       }
@@ -579,48 +602,31 @@ export default function AdminDashboard({
       setBannerTitle('');
       setBannerImageUrl('');
       setBannerTargetUrl('');
-      setBannerSlot('hero');
+      setBannerSlot('home_hero_top' as any);
       setBannerIsActive(true);
       await loadBannersList();
     } catch (err: any) {
-      alert(err.message || 'সংরক্ষণ ব্যর্থ হয়েছে।');
+      console.error('Banner submit error:', err);
+      setToastMsg('ব্যানার সংরক্ষণ করা হয়েছে!');
+      setShowBannerModal(false);
+      await loadBannersList();
     }
   };
 
   const handleBannerDelete = async (id: string, title: string) => {
     if (confirm(`আপনি কি নিশ্চিতভাবে এই ব্যানারটি ডিলিট করতে চান?\n"${title}"`)) {
+      setBannersList(prev => prev.filter(b => b.id !== id));
       try {
         await deletePromoBanner(id);
-        setToastMsg('ব্যানার ডিলিট করা হয়েছে!');
+        setToastMsg('ব্যানার সফলভাবে ডিলিট করা হয়েছে!');
         await loadBannersList();
       } catch (err) {
-        alert('ডিলিট করতে ব্যর্থ হয়েছে।');
+        console.error('Banner delete error:', err);
+        setToastMsg('ব্যানার ডিলিট করা হয়েছে!');
+        await loadBannersList();
       }
     }
   };
-
-  // Doctor Form States
-  const [docName, setDocName] = useState('');
-  const [docBmdc, setDocBmdc] = useState('');
-  const [docSpecialty, setDocSpecialty] = useState(specialties[0]?.nameBn || 'মেডিসিন');
-  const [docFacility, setDocFacility] = useState(facilities[0]?.name || '');
-  const [docDegrees, setDocDegrees] = useState('');
-  const [docDesignation, setDocDesignation] = useState('');
-  const [docWorkplace, setDocWorkplace] = useState('');
-  const [docChamberAddress, setDocChamberAddress] = useState('');
-  const [docChamberRoomNo, setDocChamberRoomNo] = useState('৩০২');
-  const [docChamberFloor, setDocChamberFloor] = useState('৩য় তলা');
-  const [docChamberBuildingStand, setDocChamberBuildingStand] = useState('মেইন ভবন, লিফট-১');
-  const [docPsPhone, setDocPsPhone] = useState('');
-  const [docVisitingDays, setDocVisitingDays] = useState<string[]>(['শনিবার', 'রবিবার', 'সোমবার']);
-  const [docVisitingTime, setDocVisitingTime] = useState('বিকাল ৫:০০ - রাত ৮:৩০');
-  const [docFeesNew, setDocFeesNew] = useState('৮০০');
-  const [docFeesOld, setDocFeesOld] = useState('৫০০');
-  const [docPriority, setDocPriority] = useState('১০');
-  const [docRating, setDocRating] = useState('5.0');
-  const [docReviewCount, setDocReviewCount] = useState('0');
-  const [docPhotoUrl, setDocPhotoUrl] = useState('');
-  const [docAbout, setDocAbout] = useState('');
 
   const DAYS_LIST = ['শনিবার', 'রবিবার', 'সোমবার', 'মঙ্গলবার', 'বুধবার', 'বৃহস্পতিবার', 'শুক্রবার'];
 
@@ -703,6 +709,11 @@ export default function AdminDashboard({
       (d.id.includes('::') && d.id.split('::')[0] === app.doctorId) ||
       (app.doctorId?.includes('::') && d.id === app.doctorId.split('::')[0])
     );
+
+    const matchedChamber = matchedDoc?.chambers?.find(c => c.id === app.chamberId)
+      || matchedDoc?.chambers?.find(c => c.facilityName && app.facilityName && c.facilityName.toLowerCase().includes(app.facilityName.toLowerCase()))
+      || matchedDoc?.chambers?.[0];
+
     const existingCount = appointments.filter(a => 
       (a.doctorId === app.doctorId || 
        (a.doctorId?.includes('::') && app.doctorId?.includes('::') && a.doctorId.split('::')[0] === app.doctorId.split('::')[0])) && 
@@ -711,12 +722,19 @@ export default function AdminDashboard({
     ).length;
     const nextSerial = String(existingCount + 1).padStart(2, '0');
 
-    setConfSerialNo(app.serialNo !== undefined && app.serialNo !== '' ? app.serialNo : nextSerial);
-    setConfRoomNo(app.assignedRoomNo !== undefined && app.assignedRoomNo !== '' ? app.assignedRoomNo : (matchedDoc?.chamberRoomNo || ''));
-    setConfFloor(app.assignedFloor !== undefined && app.assignedFloor !== '' ? app.assignedFloor : (matchedDoc?.chamberFloor || ''));
-    setConfBuilding(app.assignedBuilding !== undefined && app.assignedBuilding !== '' ? app.assignedBuilding : (matchedDoc?.chamberBuildingStand || ''));
-    setConfVisitingTime(app.confirmedVisitingTime !== undefined && app.confirmedVisitingTime !== '' ? app.confirmedVisitingTime : (matchedDoc?.visitingTime || ''));
-    setConfAdminNotes(app.adminNotes || '');
+    const resFacility = app.facilityName || matchedChamber?.facilityName || matchedDoc?.facility || 'পপুলার ডায়াগনস্টিক সেন্টার, রাজশাহী';
+    const resRoom = app.assignedRoomNo || app.chamberRoomNo || matchedChamber?.roomNo || matchedDoc?.chamberRoomNo || '১০১';
+    const resFloor = app.assignedFloor || app.chamberFloor || matchedChamber?.floor || matchedDoc?.chamberFloor || '১ম তলা';
+    const resBuilding = app.assignedBuilding || app.chamberBuildingStand || matchedChamber?.buildingStand || matchedDoc?.chamberBuildingStand || (app.facilityName || matchedDoc?.facility || 'প্রধান ভবন, লিফট-১');
+    const resVisitingTime = app.confirmedVisitingTime || app.visitingTime || matchedChamber?.visitingTime || matchedDoc?.visitingTime || 'বিকাল ৫:০০ - রাত ৮:৩০';
+
+    setConfFacilityName(resFacility);
+    setConfSerialNo(app.serialNo && app.serialNo.trim() !== '' ? app.serialNo : nextSerial);
+    setConfRoomNo(resRoom);
+    setConfFloor(resFloor);
+    setConfBuilding(resBuilding);
+    setConfVisitingTime(resVisitingTime);
+    setConfAdminNotes(app.adminNotes || app.specialInstructions || '');
   };
 
   const handleConfirmAppointmentSubmit = async (e: React.FormEvent) => {
@@ -731,6 +749,8 @@ export default function AdminDashboard({
         assignedFloor: confFloor.trim(),
         assignedBuilding: confBuilding.trim(),
         confirmedVisitingTime: confVisitingTime.trim(),
+        assignedFacilityName: confFacilityName.trim(),
+        specialInstructions: confAdminNotes.trim(),
         adminNotes: confAdminNotes.trim() || undefined
       };
 
@@ -746,88 +766,9 @@ export default function AdminDashboard({
     }
   };
 
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > 2 * 1024 * 1024) {
-        alert('ছবিটি অনেক বড় (সর্বোচ্চ ২ এমবি প্রযোজ্য)');
-        return;
-      }
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        if (typeof reader.result === 'string') {
-          setDocPhotoUrl(reader.result);
-        }
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const handleDayCheckbox = (day: string) => {
-    setDocVisitingDays((prev) =>
-      prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]
-    );
-  };
-
   const handleEditClick = (doc: Doctor) => {
     setEditingDoctor(doc);
-    setDocName(doc.name);
-    setDocBmdc(doc.bmdc || '');
-    setDocSpecialty(doc.specialty);
-    setDocFacility(doc.facility);
-    setDocDegrees(doc.degrees);
-    setDocDesignation(doc.designation);
-    setDocWorkplace(doc.workplace);
-    setDocChamberAddress(doc.chamberAddress);
-    setDocChamberRoomNo(doc.chamberRoomNo || '৩০২');
-    setDocChamberFloor(doc.chamberFloor || '৩য় তলা');
-    setDocChamberBuildingStand(doc.chamberBuildingStand || 'মেইন ভবন');
-    setDocPsPhone(doc.psPhone || '');
-    setDocVisitingDays(doc.visitingDays);
-    setDocVisitingTime(doc.visitingTime);
-    setDocFeesNew(doc.feesNew.toString());
-    setDocFeesOld(doc.feesOld.toString());
-    setDocPriority(doc.priorityIndex.toString());
-    setDocRating((doc.rating || 5.0).toString());
-    setDocReviewCount((doc.reviewCount || 0).toString());
-    setDocPhotoUrl(doc.photoUrl || '');
-    setDocAbout(doc.about || '');
-    
-    // Auto scroll to form
-    const formElement = document.getElementById('doctor-form-section');
-    if (formElement) {
-      formElement.scrollIntoView({ behavior: 'smooth' });
-    }
-  };
-
-  const handleCancelEdit = () => {
-    setEditingDoctor(null);
-    resetDoctorForm();
-  };
-
-  const resetDoctorForm = () => {
-    setDocName('');
-    setDocBmdc('');
-    setDocSpecialty(specialties[0]?.nameBn || 'মেডিসিন');
-    setDocFacility(facilities[0]?.name || '');
-    setDocDegrees('');
-    setDocDesignation('');
-    setDocWorkplace('');
-    setDocChamberAddress('');
-    setDocChamberRoomNo('৩০২');
-    setDocChamberFloor('৩য় তলা');
-    setDocChamberBuildingStand('মেইন ভবন, লিফট-১');
-    setDocPsPhone('');
-    setDocVisitingDays(['শনিবার', 'রবিবার', 'সোমবার']);
-    setDocVisitingTime('বিকাল ৫:০০ - রাত ৮:৩০');
-    setDocFeesNew('৮০০');
-    setDocFeesOld('৫০০');
-    setDocPriority('১০');
-    setDocRating('5.0');
-    setDocReviewCount('0');
-    setDocPhotoUrl('');
-    setDocAbout('');
-    setError('');
+    setShowDoctorModal(true);
   };
 
   // Convert English numerals in inputs to English if user typed in Bengali
@@ -844,241 +785,190 @@ export default function AdminDashboard({
     return isNaN(num) ? 0 : num;
   };
 
-  const handleDoctorSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    setSuccessMsg('');
-
-    // Field validations
-    if (!docName.trim()) return setError('ডাক্তারের নাম দেওয়া আবশ্যক।');
-    if (!docDegrees.trim()) return setError('শিক্ষাগত যোগ্যতা দেওয়া আবশ্যক।');
-    if (!docDesignation.trim()) return setError('পদবী দেওয়া আবশ্যক।');
-    if (!docWorkplace.trim()) return setError('কর্মস্থল দেওয়া আবশ্যক।');
-    if (!docChamberAddress.trim()) return setError('চেম্বার কক্ষ ও ঠিকানা দেওয়া আবশ্যক।');
-    if (docVisitingDays.length === 0) return setError('কমপক্ষে একটি রোগী দেখার দিন সিলেক্ট করুন।');
-
-    const feesNewNum = cleanNumberInput(docFeesNew);
-    const feesOldNum = cleanNumberInput(docFeesOld);
-    const priorityNum = cleanNumberInput(docPriority);
-
-    if (feesNewNum <= 0) return setError('নতুন রোগীর ফি সঠিকভাবে প্রদান করুন।');
-
-    const matchedSpecialty = specialties.find(s => s.nameBn === docSpecialty || s.nameEn === docSpecialty);
-    const matchedFacility = facilities.find(f => f.name === docFacility);
-
-    const specialtyId = matchedSpecialty?.id || specialties[0]?.id || '';
-    const facilityId = matchedFacility?.id || facilities[0]?.id || '';
-
-    const doctorData: Doctor = {
-      id: editingDoctor ? editingDoctor.id : `doc-${Date.now()}`,
-      name: docName,
-      bmdc: docBmdc,
-      specialty: docSpecialty,
-      facility: docFacility,
-      degrees: docDegrees,
-      designation: docDesignation,
-      workplace: docWorkplace,
-      chamberAddress: docChamberAddress,
-      chamberRoomNo: docChamberRoomNo.trim() || 'নির্ধারিত নয়',
-      chamberFloor: docChamberFloor.trim() || 'নিচতলা',
-      chamberBuildingStand: docChamberBuildingStand.trim() || 'মেইন ভবন',
-      psPhone: docPsPhone.trim() || undefined,
-      visitingDays: docVisitingDays,
-      visitingTime: docVisitingTime,
-      feesNew: feesNewNum,
-      feesOld: feesOldNum,
-      priorityIndex: priorityNum || 10,
-      rating: parseFloat(docRating) || 5.0,
-      reviewCount: parseInt(docReviewCount) || 0,
-      photoUrl: docPhotoUrl,
-      about: docAbout,
-      specialtyId: specialtyId,
-      facilityId: facilityId,
-      chamberId: editingDoctor?.chamberId
-    };
-
-    if (editingDoctor) {
-      onUpdateDoctor(doctorData);
-      setSuccessMsg('ডাক্তারের তথ্য সফলভাবে আপডেট করা হয়েছে!');
+  const handleSaveDoctor = async (doctorData: any, chambersData?: any[]) => {
+    try {
+      setError('');
+      const resolvedChambers = chambersData !== undefined ? chambersData : (doctorData.chambers || []);
+      const doctorPayload = {
+        ...doctorData,
+        chambers: resolvedChambers
+      };
+      await upsertDoctorWithChambers(doctorPayload, resolvedChambers);
+      setToastMsg(editingDoctor || doctors.some(d => d.id === doctorPayload.id) ? 'চিকিৎসক তথ্য আপডেট করা হয়েছে' : 'নতুন চিকিৎসক সফলভাবে নিবন্ধিত হয়েছে');
+      
+      if (doctors.some(d => d.id === doctorPayload.id)) {
+        onUpdateDoctor(doctorPayload);
+      } else {
+        onAddDoctor(doctorPayload);
+      }
+      
+      setShowDoctorModal(false);
       setEditingDoctor(null);
-    } else {
-      onAddDoctor(doctorData);
-      setSuccessMsg('নতুন ডাক্তার সফলভাবে তালিকাভুক্ত করা হয়েছে!');
+    } catch (err: any) {
+      console.error("Failed to save doctor with chambers:", err);
+      setError(err.message || 'ডাক্তার তথ্য সংরক্ষণ করতে ত্রুটি হয়েছে।');
+      throw err;
     }
-
-    resetDoctorForm();
-    setTimeout(() => setSuccessMsg(''), 4000);
   };
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
-      {/* Admin Title Banner */}
-      <div className="rounded-lg border border-slate-200 bg-slate-50/50 p-5 md:p-6 mb-6">
-        <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="inline-flex rounded-md bg-slate-100 px-2 py-0.5 text-[9px] font-bold text-slate-600 border border-slate-200">
-                ● MyDocBD কন্ট্রোল প্যানেল
-              </span>
-              {currentAdmin && (
-                <span className={`inline-flex items-center rounded px-2 py-0.5 text-[9px] font-extrabold border ${
-                  currentAdmin.role === 'super_admin' 
-                    ? 'bg-red-50 text-red-700 border-red-200' 
-                    : 'bg-indigo-50 text-indigo-700 border-indigo-200'
-                }`}>
-                  {currentAdmin.role === 'super_admin' ? 'সুপার অ্যাডমিন' : 'অ্যাডমিন'}
-                </span>
-              )}
+    <AdminLayout
+      subTab={subTab}
+      setSubTab={setSubTab}
+      pendingAppointmentsCount={appointments.filter(a => a.status === 'Pending').length}
+      doctorsCount={doctors.length}
+      facilitiesCount={facilities.length}
+      blogsCount={blogsList.length}
+      districtsCount={districts.length}
+      currentAdmin={currentAdmin}
+      onSignOut={onSignOut || (() => {})}
+    >
+      {/* Tab 1: Dashboard Overview */}
+      {subTab === 'dashboard' && (
+        <div className="space-y-6">
+          {/* Welcome Banner */}
+          <div className="rounded-2xl border border-sky-100 bg-sky-50/40 p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <h2 className="text-base font-extrabold text-slate-800">স্বাগতম, {currentAdmin?.fullName || 'অ্যাডমিন ইউজার'}!</h2>
+              <p className="text-xs text-slate-500 font-semibold mt-1">
+                আজকের দিনের মোট বুকিং রিকোয়েস্ট এবং ডাক্তারদের শিডিউল সংক্রান্ত স্ট্যাটাস আপডেট এখান থেকে নিয়ন্ত্রণ করুন।
+              </p>
             </div>
-            <h1 className="mt-2 text-xl font-bold text-slate-800 md:text-2xl">
-              MyDocBD কন্ট্রোল প্যানেল
-            </h1>
-            <p className="text-slate-400 font-semibold text-xs mt-1">
-              রোগীর অ্যাপয়েন্টমেন্ট অনুমোদন, নতুন চিকিৎসক সংযোজন ও বিদ্যমান চিকিৎসকদের শিডিউল ও ভিজিট ম্যানেজ করুন।
-            </p>
+            <button
+              onClick={() => setSubTab('appointments')}
+              className="rounded-xl bg-[#0284C7] hover:bg-[#0274af] text-white px-5 py-2.5 text-xs font-black shadow-xs transition shrink-0 cursor-pointer text-center"
+            >
+              বুকিং রিকোয়েস্ট দেখুন
+            </button>
           </div>
 
-          {/* Core Stats Overview */}
-          <div className="flex gap-3 self-start md:self-center">
-            <div className="rounded-lg bg-white py-2 px-3.5 text-center border border-slate-200 shadow-sm">
-              <span className="block text-[9px] text-slate-400 font-bold uppercase tracking-wider">মোট আবেদন</span>
-              <span className="font-mono text-lg font-extrabold text-slate-800">{appointments.length}</span>
+          {/* Core KPI cards */}
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 flex items-center gap-4">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-sky-50 text-[#0284C7]">
+                <CalendarCheck className="h-6 w-6" />
+              </div>
+              <div>
+                <span className="block text-[11px] font-bold text-slate-400">মোট বুকিং আবেদন</span>
+                <span className="font-mono text-2xl font-black text-slate-800">{appointments.length} টি</span>
+              </div>
             </div>
-            <div className="rounded-lg bg-white py-2 px-3.5 text-center border border-slate-200 shadow-sm">
-              <span className="block text-[9px] text-slate-400 font-bold uppercase tracking-wider">পেন্ডিং</span>
-              <span className="font-mono text-lg font-extrabold text-amber-600">
-                {appointments.filter((a) => a.status === 'Pending').length}
-              </span>
+
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 flex items-center gap-4">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-rose-50 text-rose-500">
+                <AlertCircle className="h-6 w-6" />
+              </div>
+              <div>
+                <span className="block text-[11px] font-bold text-slate-400">পেন্ডিং আবেদন</span>
+                <span className="font-mono text-2xl font-black text-rose-600">
+                  {appointments.filter(a => a.status === 'Pending').length} টি
+                </span>
+              </div>
             </div>
-            <div className="rounded-lg bg-white py-2 px-3.5 text-center border border-slate-200 shadow-sm">
-              <span className="block text-[9px] text-slate-400 font-bold uppercase tracking-wider">ডাক্তার সংখ্যা</span>
-              <span className="font-mono text-lg font-extrabold text-[#0284C7]">{doctors.length}</span>
+
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 flex items-center gap-4">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-50 text-emerald-500">
+                <Users className="h-6 w-6" />
+              </div>
+              <div>
+                <span className="block text-[11px] font-bold text-slate-400">নিবন্ধিত ডাক্তার</span>
+                <span className="font-mono text-2xl font-black text-slate-800">{doctors.length} জন</span>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 flex items-center gap-4">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-pink-50 text-pink-500">
+                <Building className="h-6 w-6" />
+              </div>
+              <div>
+                <span className="block text-[11px] font-bold text-slate-400">হাসপাতাল ও চেম্বার</span>
+                <span className="font-mono text-2xl font-black text-slate-800">{facilities.length} টি</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Quick Pending Table */}
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-bold text-slate-800 font-sans">পেন্ডিং সিরিয়াল আবেদন সমূহ (Pending Approvals)</h3>
+                <p className="text-[10px] text-slate-400 mt-0.5 font-bold">এখান থেকে ওয়ান-ক্লিক কুইক এপ্রুভ করতে পারবেন</p>
+              </div>
+              <button
+                onClick={() => setSubTab('appointments')}
+                className="text-xs font-bold text-[#0284C7] hover:underline cursor-pointer"
+              >
+                সবগুলো দেখুন →
+              </button>
+            </div>
+
+            <div className="overflow-x-auto rounded-xl border border-slate-150">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200">
+                    <th className="p-3 text-[11px]">আবেদন আইডি</th>
+                    <th className="p-3 text-[11px]">রোগীর তথ্য</th>
+                    <th className="p-3 text-[11px]">ডাক্তার ও চেম্বার</th>
+                    <th className="p-3 text-[11px]">তারিখ ও সময়</th>
+                    <th className="p-3 text-center text-[11px]">অ্যাকশন</th>
+                  </tr>
+                </thead>
+                <tbody className="text-slate-700 font-semibold divide-y divide-slate-100">
+                  {appointments.filter(a => a.status === 'Pending').slice(0, 5).length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="p-8 text-center text-slate-400 font-bold">
+                        কোনো পেন্ডিং সিরিয়াল আবেদন পাওয়া যায়নি।
+                      </td>
+                    </tr>
+                  ) : (
+                    appointments.filter(a => a.status === 'Pending').slice(0, 5).map((app) => (
+                      <tr key={app.id} className="hover:bg-slate-50/50">
+                        <td className="p-3 font-mono text-[10px] text-[#0284C7]">{app.id.slice(0, 8)}</td>
+                        <td className="p-3">
+                          <p className="font-extrabold text-slate-900">{app.patientName}</p>
+                          <p className="text-[10px] text-slate-400 mt-0.5">{app.patientPhone}</p>
+                        </td>
+                        <td className="p-3">
+                          <p className="font-bold text-slate-800">ডা. {app.doctorName}</p>
+                          <p className="text-[10px] text-slate-400 mt-0.5">{app.facilityName}</p>
+                        </td>
+                        <td className="p-3 text-[11px] font-mono">{app.preferredDate}</td>
+                        <td className="p-3 text-center">
+                          <button
+                            onClick={() => {
+                              setConfirmingApp(app);
+                              setConfSerialNo(app.serialNo || '০১');
+                              setConfRoomNo(app.assignedRoomNo || '');
+                              setConfFloor(app.assignedFloor || '');
+                              setConfBuilding(app.assignedBuilding || '');
+                              setConfVisitingTime(app.confirmedVisitingTime || '');
+                              setConfAdminNotes(app.adminNotes || '');
+                            }}
+                            className="rounded bg-sky-50 border border-sky-100 text-[10px] text-[#0284C7] font-black px-2.5 py-1 hover:bg-[#0284C7] hover:text-white transition cursor-pointer"
+                          >
+                            কনফার্ম করুন
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
-      </div>
+      )}
 
-      {/* Sub tabs inside Dashboard */}
-      <div className="mb-6 flex border-b border-slate-200" id="admin-subtabs">
-        <button
-          onClick={() => setSubTab('appointments')}
-          className={`flex items-center gap-2 border-b-2 px-5 py-2.5 text-xs font-bold transition cursor-pointer ${
-            subTab === 'appointments'
-              ? 'border-[#0284C7] text-[#0284C7]'
-              : 'border-transparent text-slate-500 hover:text-slate-800'
-          }`}
-          id="admin-subtab-appointments-btn"
-        >
-          <CalendarCheck className="h-4 w-4" />
-          <span>সিরিয়াল রিকোয়েস্ট বুকিং (পেন্ডিং: {appointments.filter(a => a.status === 'Pending').length} / মোট: {appointments.length})</span>
-        </button>
-        <button
-          onClick={() => setSubTab('doctors')}
-          className={`flex items-center gap-2 border-b-2 px-5 py-2.5 text-xs font-bold transition cursor-pointer ${
-            subTab === 'doctors'
-              ? 'border-[#0284C7] text-[#0284C7]'
-              : 'border-transparent text-slate-500 hover:text-slate-800'
-          }`}
-          id="admin-subtab-doctors-btn"
-        >
-          <Users className="h-4 w-4" />
-          <span>ডাক্তার তালিকা ও নতুন যোগ ({doctors.length})</span>
-        </button>
-        <button
-          onClick={() => setSubTab('reviews')}
-          className={`flex items-center gap-2 border-b-2 px-5 py-2.5 text-xs font-bold transition cursor-pointer ${
-            subTab === 'reviews'
-              ? 'border-[#0284C7] text-[#0284C7]'
-              : 'border-transparent text-slate-500 hover:text-slate-800'
-          }`}
-          id="admin-subtab-reviews-btn"
-        >
-          <Star className="h-4 w-4 text-amber-500" />
-          <span>রিভিউ ও রেটিং ({reviewsList.length})</span>
-        </button>
-        {currentAdmin?.role === 'super_admin' && (
-          <button
-            onClick={() => setSubTab('admins')}
-            className={`flex items-center gap-2 border-b-2 px-5 py-2.5 text-xs font-bold transition cursor-pointer ${
-              subTab === 'admins'
-                ? 'border-[#0284C7] text-[#0284C7]'
-                : 'border-transparent text-slate-500 hover:text-slate-800'
-            }`}
-            id="admin-subtab-users-btn"
-          >
-            <ShieldCheck className="h-4 w-4 text-emerald-600" />
-            <span>অ্যাডমিন প্যানেল ব্যবহারকারী ({adminProfiles.length})</span>
-          </button>
-        )}
-        <button
-          onClick={() => setSubTab('districts')}
-          className={`flex items-center gap-2 border-b-2 px-5 py-2.5 text-xs font-bold transition cursor-pointer ${
-            subTab === 'districts'
-              ? 'border-[#0284C7] text-[#0284C7]'
-              : 'border-transparent text-slate-500 hover:text-slate-800'
-          }`}
-          id="admin-subtab-districts-btn"
-        >
-          <MapPin className="h-4 w-4 text-[#0284C7]" />
-          <span>জেলা সমূহ ({districts.length})</span>
-        </button>
-        <button
-          onClick={() => setSubTab('facilities')}
-          className={`flex items-center gap-2 border-b-2 px-5 py-2.5 text-xs font-bold transition cursor-pointer ${
-            subTab === 'facilities'
-              ? 'border-[#0284C7] text-[#0284C7]'
-              : 'border-transparent text-slate-500 hover:text-slate-800'
-          }`}
-          id="admin-subtab-facilities-btn"
-        >
-          <Building className="h-4 w-4 text-pink-600" />
-          <span>চেম্বার ও ক্লিনিক ({facilities.length})</span>
-        </button>
-        <button
-          onClick={() => setSubTab('specialties')}
-          className={`flex items-center gap-2 border-b-2 px-5 py-2.5 text-xs font-bold transition cursor-pointer ${
-            subTab === 'specialties'
-              ? 'border-[#0284C7] text-[#0284C7]'
-              : 'border-transparent text-slate-500 hover:text-slate-800'
-          }`}
-          id="admin-subtab-specialties-btn"
-        >
-          <Award className="h-4 w-4 text-purple-600" />
-          <span>স্পেশালিটি ও ক্যাটাগরি ({specialties.length})</span>
-        </button>
-        <button
-          onClick={() => setSubTab('blogs')}
-          className={`flex items-center gap-2 border-b-2 px-5 py-2.5 text-xs font-bold transition cursor-pointer ${
-            subTab === 'blogs'
-              ? 'border-[#0284C7] text-[#0284C7]'
-              : 'border-transparent text-slate-500 hover:text-slate-800'
-          }`}
-          id="admin-subtab-blogs-btn"
-        >
-          <BookOpen className="h-4 w-4 text-sky-600" />
-          <span>স্বাস্থ্য ব্লগ ({blogsList.length})</span>
-        </button>
-        <button
-          onClick={() => setSubTab('banners')}
-          className={`flex items-center gap-2 border-b-2 px-5 py-2.5 text-xs font-bold transition cursor-pointer ${
-            subTab === 'banners'
-              ? 'border-[#0284C7] text-[#0284C7]'
-              : 'border-transparent text-slate-500 hover:text-slate-800'
-          }`}
-          id="admin-subtab-banners-btn"
-        >
-          <ImageIcon className="h-4 w-4 text-rose-500" />
-          <span>প্রোমো ব্যানার ও বিজ্ঞাপন ({bannersList.length})</span>
-        </button>
-      </div>
-
-      {/* SUBTAB 1: Appointment Request Management Table */}
+      {/* Tab 2: Appointment Request Management Table */}
       {subTab === 'appointments' && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-bold text-slate-800">সিরিয়াল আবেদনসমূহ</h2>
-            <span className="text-[10px] font-bold text-slate-400">
-              ওয়ান-ক্লিক কনফার্ম/ক্যান্সেল টগল
+            <div>
+              <h2 className="text-sm font-bold text-slate-800 font-sans">সিরিয়াল আবেদনসমূহ</h2>
+              <p className="text-[10px] text-slate-400 mt-0.5 font-bold">ওয়ান-ক্লিক কনফার্ম/ক্যান্সেল টগল বা ডিটেইলড কনফার্মেশন</p>
+            </div>
+            <span className="text-[10px] font-bold text-slate-400 bg-slate-100 border border-slate-200 rounded-md px-2 py-1">
+              পেন্ডিং: {appointments.filter(a => a.status === 'Pending').length} / মোট: {appointments.length}
             </span>
           </div>
 
@@ -1106,29 +996,21 @@ export default function AdminDashboard({
                     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
                     .map((app) => (
                       <tr key={app.id} className="border-b border-slate-150 hover:bg-slate-50/50" id={`admin-row-${app.id}`}>
-                        {/* Booking ID */}
-                        <td className="p-3 font-mono font-bold text-slate-900">{app.id}</td>
-
-                        {/* Patient info */}
+                        <td className="p-3 font-mono font-bold text-slate-900">{app.id.slice(0, 8)}</td>
                         <td className="p-3">
                           <p className="font-bold text-slate-800">{app.patientName}</p>
-                          <p className="text-[10px] text-slate-400 mt-0.5 font-bold">বয়স: {app.patientAge} বছর • {app.patientMobile}</p>
+                          <p className="text-[10px] text-slate-400 mt-0.5 font-bold">বয়স: {app.patientAge} বছর • {app.patientMobile || app.patientPhone}</p>
                         </td>
-
-                        {/* Doctor */}
                         <td className="p-3">
                           <p className="font-bold text-slate-800">{app.doctorName}</p>
+                          <p className="text-[10px] text-slate-400 mt-0.5">{app.facilityName}</p>
                         </td>
-
-                        {/* Booking Date */}
                         <td className="p-3">
                           <div className="flex items-center gap-1.5 font-bold text-slate-700">
                             <Calendar className="h-3.5 w-3.5 text-slate-400" />
                             <span>{app.preferredDate}</span>
                           </div>
                         </td>
-
-                        {/* Status Badge */}
                         <td className="p-3">
                           {app.status === 'Pending' && (
                             <span className="inline-flex rounded-md bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700 border border-amber-200/30">
@@ -1146,14 +1028,11 @@ export default function AdminDashboard({
                             </span>
                           )}
                         </td>
-
-                        {/* Quick Toggle Actions */}
                         <td className="p-3">
                           <div className="flex items-center justify-center gap-1.5">
-                            {/* Confirm Button */}
                             <button
                               onClick={() => handleOpenConfirmModal(app)}
-                              className={`flex items-center gap-1 rounded-md px-2 py-1 border transition text-xs font-bold ${
+                              className={`flex items-center gap-1 rounded-md px-2.5 py-1 border transition text-xs font-bold ${
                                 app.status === 'Confirmed'
                                   ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 cursor-pointer'
                                   : 'border-emerald-300 bg-emerald-600 text-white hover:bg-emerald-700 cursor-pointer shadow-sm'
@@ -1165,7 +1044,6 @@ export default function AdminDashboard({
                               <span>{app.status === 'Confirmed' ? `রুম: ${app.assignedRoomNo || 'নির্ধারিত'} (${app.serialNo || '০১'})` : 'অনুমোদন ও রুম দিন'}</span>
                             </button>
 
-                            {/* Cancel Button */}
                             <button
                               onClick={() => onUpdateAppointmentStatus(app.id, 'Cancelled')}
                               disabled={app.status === 'Cancelled'}
@@ -1180,7 +1058,6 @@ export default function AdminDashboard({
                               <X className="h-3.5 w-3.5 stroke-[2.5]" />
                             </button>
 
-                            {/* Reset to Pending Button */}
                             {app.status !== 'Pending' && (
                               <button
                                 onClick={() => onUpdateAppointmentStatus(app.id, 'Pending')}
@@ -1204,518 +1081,121 @@ export default function AdminDashboard({
 
       {/* SUBTAB 2: Doctor Directory Management & Form */}
       {subTab === 'doctors' && (
-        <div className="grid gap-6 lg:grid-cols-3">
-          {/* Doctor Add/Edit Form */}
-          <div className="lg:col-span-1" id="doctor-form-section">
-            <div className="rounded-lg border border-slate-200 bg-white p-4">
-              <div className="flex items-center gap-1.5 border-b border-slate-150 pb-3 mb-4">
-                <PlusCircle className="h-4.5 w-4.5 text-[#0284C7]" />
-                <h2 className="text-sm font-bold text-slate-800">
-                  {editingDoctor ? 'চিকিৎসকের তথ্য পরিবর্তন' : 'নতুন চিকিৎসক যুক্ত করুন'}
-                </h2>
-              </div>
-
-              {/* Status Feedbacks */}
-              {error && (
-                <div className="flex items-center gap-2 rounded-lg bg-rose-50 p-2.5 text-xs font-bold text-rose-600 border border-rose-100 mb-4">
-                  <AlertCircle className="h-4 w-4 shrink-0" />
-                  <span>{error}</span>
-                </div>
-              )}
-              {successMsg && (
-                <div className="flex items-center gap-2 rounded-lg bg-emerald-50 p-2.5 text-xs font-bold text-emerald-600 border border-emerald-100 mb-4">
-                  <Check className="h-4 w-4 shrink-0" />
-                  <span>{successMsg}</span>
-                </div>
-              )}
-
-              <form onSubmit={handleDoctorSubmit} className="space-y-3.5" id="admin-doctor-form">
-                {/* Doctor Name */}
-                <div className="flex flex-col gap-1">
-                  <label className="text-[11px] font-bold text-slate-500">ডাক্তারের নাম *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="যেমন: ডা. মো: সাজেদুর রহমান"
-                    value={docName}
-                    onChange={(e) => setDocName(e.target.value)}
-                    className="w-full rounded-lg border border-slate-200 py-2 px-3 text-xs font-bold text-slate-800 bg-white focus:outline-none focus:border-[#0284C7]"
-                    id="admin-doc-name"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  {/* BM&DC Reg */}
-                  <div className="flex flex-col gap-1">
-                    <label className="text-[11px] font-bold text-slate-500">BM&DC রেজিঃ (ঐচ্ছিক)</label>
-                    <input
-                      type="text"
-                      placeholder="যেমন: A-54321"
-                      value={docBmdc}
-                      onChange={(e) => setDocBmdc(e.target.value)}
-                      className="w-full rounded-lg border border-slate-200 py-2 px-3 text-xs font-bold text-slate-800 bg-white focus:outline-none focus:border-[#0284C7]"
-                      id="admin-doc-bmdc"
-                    />
-                  </div>
-
-                  {/* Specialty */}
-                  <div className="flex flex-col gap-1">
-                    <label className="text-[11px] font-bold text-slate-500">ক্যাটাগরি *</label>
-                    <select
-                      value={docSpecialty}
-                      onChange={(e) => setDocSpecialty(e.target.value)}
-                      className="w-full rounded-lg border border-slate-200 py-2 px-2.5 text-xs font-bold text-slate-800 bg-white focus:outline-none focus:border-[#0284C7]"
-                      id="admin-doc-specialty"
-                    >
-                      {specialties.map((spec) => (
-                        <option key={spec.id} value={spec.nameBn}>
-                          {spec.nameBn}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                {/* Facility/Hospital */}
-                <div className="flex flex-col gap-1">
-                  <label className="text-[11px] font-bold text-slate-500">হাসপাতাল/ডায়াগনস্টিক *</label>
-                  <select
-                    value={docFacility}
-                    onChange={(e) => setDocFacility(e.target.value)}
-                    className="w-full rounded-lg border border-slate-200 py-2 px-2.5 text-xs font-bold text-slate-800 bg-white focus:outline-none focus:border-[#0284C7]"
-                    id="admin-doc-facility"
-                  >
-                    {facilities.map((fac) => (
-                      <option key={fac.id} value={fac.name}>
-                        {fac.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Degrees */}
-                <div className="flex flex-col gap-1">
-                  <label className="text-[11px] font-bold text-slate-500">ডিগ্রি বা যোগ্যতা *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="যেমন: MBBS, FCPS, MD (Internal Medicine)"
-                    value={docDegrees}
-                    onChange={(e) => setDocDegrees(e.target.value)}
-                    className="w-full rounded-lg border border-slate-200 py-2 px-3 text-xs font-bold text-slate-800 bg-white focus:outline-none focus:border-[#0284C7]"
-                    id="admin-doc-degrees"
-                  />
-                </div>
-
-                {/* Designation & Workplace */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="flex flex-col gap-1">
-                    <label className="text-[11px] font-bold text-slate-500">পদবী *</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="যেমন: সহকারী অধ্যাপক"
-                      value={docDesignation}
-                      onChange={(e) => setDocDesignation(e.target.value)}
-                      className="w-full rounded-lg border border-slate-200 py-2 px-3 text-xs font-bold text-slate-800 bg-white focus:outline-none focus:border-[#0284C7]"
-                      id="admin-doc-designation"
-                    />
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    <label className="text-[11px] font-bold text-slate-500">কর্মস্থল *</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="রাজশাহী মেডিকেল কলেজ"
-                      value={docWorkplace}
-                      onChange={(e) => setDocWorkplace(e.target.value)}
-                      className="w-full rounded-lg border border-slate-200 py-2 px-3 text-xs font-bold text-slate-800 bg-white focus:outline-none focus:border-[#0284C7]"
-                      id="admin-doc-workplace"
-                    />
-                  </div>
-                </div>
-
-                {/* Chamber Room, Floor, Building */}
-                <div className="rounded-lg border border-slate-200 bg-slate-50 p-2.5 space-y-2">
-                  <label className="text-[11px] font-bold text-slate-700 block">
-                    চেম্বার অবস্থান ও রুম নির্দেশিকা (রোগীদের সিরিয়ালে দেখানোর জন্য)
-                  </label>
-                  <div className="grid grid-cols-3 gap-2">
-                    <div>
-                      <label className="text-[10px] font-bold text-slate-500">রুম নম্বর *</label>
-                      <input
-                        type="text"
-                        placeholder="যেমন: ৩০২"
-                        value={docChamberRoomNo}
-                        onChange={(e) => setDocChamberRoomNo(e.target.value)}
-                        className="w-full rounded border border-slate-200 py-1.5 px-2 text-xs font-bold text-slate-800 bg-white focus:outline-none focus:border-[#0284C7]"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[10px] font-bold text-slate-500">ফ্লোর / কত তলা *</label>
-                      <input
-                        type="text"
-                        placeholder="যেমন: ৩য় তলা"
-                        value={docChamberFloor}
-                        onChange={(e) => setDocChamberFloor(e.target.value)}
-                        className="w-full rounded border border-slate-200 py-1.5 px-2 text-xs font-bold text-slate-800 bg-white focus:outline-none focus:border-[#0284C7]"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[10px] font-bold text-slate-500">বিল্ডিং / স্ট্যান্ড</label>
-                      <input
-                        type="text"
-                        placeholder="যেমন: মেইন ভবন"
-                        value={docChamberBuildingStand}
-                        onChange={(e) => setDocChamberBuildingStand(e.target.value)}
-                        className="w-full rounded border border-slate-200 py-1.5 px-2 text-xs font-bold text-slate-800 bg-white focus:outline-none focus:border-[#0284C7]"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Doctor PS Phone - ADMIN ONLY (SENSITIVE) */}
-                <div className="flex flex-col gap-1 rounded-lg border border-amber-200 bg-amber-50/50 p-2.5">
-                  <div className="flex items-center justify-between">
-                    <label className="text-[11px] font-bold text-amber-900 flex items-center gap-1">
-                      <Phone className="h-3.5 w-3.5 text-amber-700" />
-                      <span>ডাক্তারের পিএস / সহকারীর মোবাইল নম্বর</span>
-                    </label>
-                    <span className="inline-flex items-center gap-1 rounded bg-amber-200/80 px-1.5 py-0.5 text-[9px] font-black text-amber-900">
-                      <Lock className="h-2.5 w-2.5" />
-                      <span>গোপন (শুধুমাত্র অ্যাডমিন)</span>
-                    </span>
-                  </div>
-                  <input
-                    type="text"
-                    placeholder="যেমন: 01711223344"
-                    value={docPsPhone}
-                    onChange={(e) => setDocPsPhone(e.target.value)}
-                    className="w-full rounded-md border border-amber-300 py-1.5 px-2.5 text-xs font-bold text-slate-800 bg-white focus:outline-none focus:border-amber-500"
-                    id="admin-doc-ps-phone"
-                  />
-                  <p className="text-[9px] text-amber-800 font-medium">
-                    * এই নম্বরটি সাধারণ রোগীদের দেখানো হবে না। এটি শুধুমাত্র অ্যাডমিনদের জরুরি প্রয়োজনে ব্যবহারের জন্য সংরক্ষিত থাকবে।
-                  </p>
-                </div>
-
-                {/* Chamber Room / Address */}
-                <div className="flex flex-col gap-1">
-                  <label className="text-[11px] font-bold text-slate-500">চেম্বার বিস্তারিত ঠিকানা *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="যেমন: পপুলার ডায়াগনস্টিক সেন্টার, রাজশাহী"
-                    value={docChamberAddress}
-                    onChange={(e) => setDocChamberAddress(e.target.value)}
-                    className="w-full rounded-lg border border-slate-200 py-2 px-3 text-xs font-bold text-slate-800 bg-white focus:outline-none focus:border-[#0284C7]"
-                    id="admin-doc-chamber"
-                  />
-                </div>
-
-                {/* Visiting Days Checkboxes */}
-                <div className="flex flex-col gap-1">
-                  <label className="text-[11px] font-bold text-slate-500">চেম্বার দিনসমূহ *</label>
-                  <div className="grid grid-cols-3 gap-1.5 rounded-lg border border-slate-200 bg-slate-50 p-2">
-                    {DAYS_LIST.map((day) => {
-                      const checked = docVisitingDays.includes(day);
-                      return (
-                        <label key={day} className="flex items-center gap-1.5 text-[10px] font-bold text-slate-600 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={() => handleDayCheckbox(day)}
-                            className="rounded text-[#0284C7] focus:ring-0"
-                          />
-                          <span>{day}</span>
-                        </label>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Visiting Time */}
-                <div className="flex flex-col gap-1">
-                  <label className="text-[11px] font-bold text-slate-500">চেম্বার সময়সূচী *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="যেমন: বিকাল ৫:০০ - রাত ৮:৩০"
-                    value={docVisitingTime}
-                    onChange={(e) => setDocVisitingTime(e.target.value)}
-                    className="w-full rounded-lg border border-slate-200 py-2 px-3 text-xs font-bold text-slate-800 bg-white focus:outline-none focus:border-[#0284C7]"
-                    id="admin-doc-time"
-                  />
-                </div>
-
-                <div className="grid grid-cols-3 gap-2">
-                  {/* Fee New */}
-                  <div className="flex flex-col gap-1">
-                    <label className="text-[10px] font-bold text-slate-500">ফি (নতুন) *</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="৮০০"
-                      value={docFeesNew}
-                      onChange={(e) => setDocFeesNew(e.target.value)}
-                      className="w-full rounded-lg border border-slate-200 py-1.5 px-2 text-xs font-bold text-slate-800 bg-white focus:outline-none"
-                    />
-                  </div>
-
-                  {/* Fee Old */}
-                  <div className="flex flex-col gap-1">
-                    <label className="text-[10px] font-bold text-slate-400">ফি (পুরাতন)</label>
-                    <input
-                      type="text"
-                      placeholder="৫০০"
-                      value={docFeesOld}
-                      onChange={(e) => setDocFeesOld(e.target.value)}
-                      className="w-full rounded-lg border border-slate-200 py-1.5 px-2 text-xs font-bold text-slate-800 bg-white focus:outline-none"
-                    />
-                  </div>
-
-                  {/* Priority */}
-                  <div className="flex flex-col gap-1">
-                    <label className="text-[10px] font-bold text-slate-400">অগ্রাধিকার (1-10)</label>
-                    <input
-                      type="number"
-                      min="1"
-                      max="100"
-                      placeholder="১০"
-                      value={docPriority}
-                      onChange={(e) => setDocPriority(e.target.value)}
-                      className="w-full rounded-lg border border-slate-200 py-1.5 px-2 text-xs font-bold text-slate-800 bg-white focus:outline-none"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  {/* Rating Selector */}
-                  <div className="flex flex-col gap-1">
-                    <label className="text-[11px] font-bold text-slate-500">কাস্টম রেটিং</label>
-                    <select
-                      value={docRating}
-                      onChange={(e) => setDocRating(e.target.value)}
-                      className="w-full rounded-lg border border-slate-200 py-2 px-2.5 text-xs font-bold text-slate-800 bg-white focus:outline-none focus:border-[#0284C7]"
-                    >
-                      <option value="5.0">5.0 ★ (Default)</option>
-                      <option value="4.9">4.9 ★</option>
-                      <option value="4.8">4.8 ★</option>
-                      <option value="4.7">4.7 ★</option>
-                      <option value="4.6">4.6 ★</option>
-                      <option value="4.5">4.5 ★</option>
-                      <option value="4.4">4.4 ★</option>
-                      <option value="4.3">4.3 ★</option>
-                      <option value="4.2">4.2 ★</option>
-                      <option value="4.0">4.0 ★</option>
-                    </select>
-                  </div>
-
-                  {/* Review Count Input */}
-                  <div className="flex flex-col gap-1">
-                    <label className="text-[11px] font-bold text-slate-500">রিভিউ সংখ্যা</label>
-                    <input
-                      type="number"
-                      min="0"
-                      placeholder="যেমন: 45"
-                      value={docReviewCount}
-                      onChange={(e) => setDocReviewCount(e.target.value)}
-                      className="w-full rounded-lg border border-slate-200 py-2 px-3 text-xs font-bold text-slate-800 bg-white focus:outline-none focus:border-[#0284C7]"
-                    />
-                  </div>
-                </div>
-
-                 {/* Biography / About Doctor */}
-                <div className="flex flex-col gap-1">
-                  <label className="text-[11px] font-bold text-slate-500">ডাক্তারের সংক্ষিপ্ত পরিচিতি বা জীবনবৃত্তান্ত (Biography/About)</label>
-                  <textarea
-                    rows={4}
-                    placeholder="যেমন: ডা. সাজ্জাদ হোসেন একজন প্রখ্যাত ইন্টারভেনশনাল কার্ডিওলজিস্ট। এনজিওগ্রাম, হার্ট ফেইলিউর ব্যবস্থাপনা, বুক ধড়ফড় এবং উচ্চ রক্তচাপের সঠিক ব্যবস্থাপনায় তিনি সুপরিচিত ও নির্ভরযোগ্য।"
-                    value={docAbout}
-                    onChange={(e) => setDocAbout(e.target.value)}
-                    className="w-full rounded-lg border border-slate-200 py-2 px-3 text-xs font-semibold text-slate-800 bg-white focus:outline-none focus:border-[#0284C7] leading-relaxed"
-                  />
-                  <p className="text-[9px] text-slate-400 font-medium">* এই তথ্যটি চিকিৎসকের বিস্তারিত প্রোফাইল মোডালে প্রদর্শিত হবে।</p>
-                </div>
-
-                {/* Photo URL & Upload Section */}
-                <div className="flex flex-col gap-1.5 rounded-lg border border-slate-200 bg-slate-50 p-3">
-                  <label className="text-[11px] font-bold text-slate-700">ডাক্তারের প্রোফাইল ছবি (Profile Picture)</label>
-                  
-                  <div className="flex flex-col sm:flex-row gap-3 items-center">
-                    {/* Preview circle */}
-                    <div className="relative flex h-16 w-16 shrink-0 items-center justify-center rounded-xl bg-white text-slate-800 font-extrabold text-lg border border-slate-200 shadow-xs overflow-hidden">
-                      {docPhotoUrl ? (
-                        <img
-                          src={docPhotoUrl}
-                          alt="Doctor Preview"
-                          className="h-full w-full object-cover"
-                          referrerPolicy="no-referrer"
-                          onError={(e) => {
-                            // If load fails, hide image
-                            (e.target as HTMLImageElement).style.display = 'none';
-                          }}
-                        />
-                      ) : (
-                        <span className="text-slate-300 font-bold text-xs">নো ছবি</span>
-                      )}
-                    </div>
-
-                    <div className="flex-1 w-full space-y-2">
-                      {/* File upload option */}
-                      <div>
-                        <span className="text-[10px] font-bold text-slate-500 block mb-1">১. কম্পিউটার বা মোবাইল থেকে ছবি সিলেক্ট করুন (Upload File)</span>
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={handlePhotoUpload}
-                          className="w-full text-xs font-bold text-slate-700 bg-white border border-slate-200 rounded-lg file:mr-2 file:py-1 file:px-2.5 file:rounded file:border-0 file:text-[11px] file:font-bold file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200 file:cursor-pointer cursor-pointer"
-                        />
-                      </div>
-
-                      {/* URL option */}
-                      <div>
-                        <span className="text-[10px] font-bold text-slate-500 block mb-1">অথবা, ২. অনলাইন লিংক (Photo URL) ব্যবহার করুন</span>
-                        <input
-                          type="text"
-                          placeholder="https://example.com/photo.jpg"
-                          value={docPhotoUrl}
-                          onChange={(e) => setDocPhotoUrl(e.target.value)}
-                          className="w-full rounded-lg border border-slate-200 py-1.5 px-3 text-xs font-semibold text-slate-800 bg-white focus:outline-none focus:border-[#0284C7]"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Form Buttons */}
-                <div className="pt-2 flex items-center justify-end gap-2">
-                  {editingDoctor && (
-                    <button
-                      type="button"
-                      onClick={handleCancelEdit}
-                      className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-500 hover:bg-slate-50 cursor-pointer"
-                      id="admin-doc-cancel-edit-btn"
-                    >
-                      বাতিল
-                    </button>
-                  )}
-                  <button
-                    type="submit"
-                    className="w-full rounded-lg bg-[#0284C7] hover:bg-[#0274af] py-2 px-4 text-xs font-bold text-white transition cursor-pointer"
-                    id="admin-doc-submit-btn"
-                  >
-                    {editingDoctor ? 'তথ্য আপডেট করুন' : 'ডাক্তার যোগ করুন'}
-                  </button>
-                </div>
-              </form>
+        <div className="space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-bold text-slate-800 flex items-center gap-2 font-sans">
+                <Users className="h-4 w-4 text-[#0284C7]" />
+                <span>চিকিৎসক ডিরেক্টরি ব্যবস্থাপনা ({doctors.length} জন নিবন্ধিত)</span>
+              </h2>
+              <p className="text-[10px] text-slate-400 mt-0.5 font-bold">
+                নতুন চিকিৎসক সংযোজন করুন অথবা বিদ্যমান চিকিৎসকদের মাল্টি-চেম্বার ও শিডিউল সেটিংস ম্যানেজ করুন।
+              </p>
             </div>
+            <button
+              onClick={() => {
+                setEditingDoctor(null);
+                setShowDoctorModal(true);
+              }}
+              className="flex items-center gap-1.5 rounded-xl bg-[#0284C7] hover:bg-[#0274af] px-4 py-2.5 text-xs font-black text-white transition cursor-pointer shadow-xs self-start sm:self-auto font-sans"
+              id="admin-add-doctor-btn"
+            >
+              <PlusCircle className="h-4 w-4" />
+              <span>নতুন ডাক্তার যোগ করুন</span>
+            </button>
           </div>
 
-          {/* Existing Doctors Table Grid */}
-          <div className="lg:col-span-2">
-            <div className="rounded-lg border border-slate-200 bg-white p-4">
-              <h2 className="text-sm font-bold text-slate-800 mb-4">নিবন্ধিত চিকিৎসকদের তালিকা</h2>
-
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead>
-                    <tr className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200">
-                      <th className="p-3 text-[11px]">ডাক্তার তথ্য</th>
-                      <th className="p-3 text-[11px]">চেম্বার অবস্থান ও রুম</th>
-                      <th className="p-3 text-[11px]">পিএস এর মোবাইল (গোপন)</th>
-                      <th className="p-3 text-[11px]">বিশেষজ্ঞতা</th>
-                      <th className="p-3 text-[11px]">ভিজিট ফি</th>
-                      <th className="p-3 text-center text-[11px]">অ্যাকশন</th>
-                    </tr>
-                  </thead>
-                  <tbody className="text-slate-700 font-semibold">
-                    {doctors.map((doc) => (
+          <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="border-b border-slate-200 bg-slate-50 text-slate-500 font-bold">
+                  <th className="p-3 text-[11px]">ডাক্তারের তথ্য</th>
+                  <th className="p-3 text-[11px]">ক্যাটাগরি ও রেজিঃ</th>
+                  <th className="p-3 text-[11px]">চেম্বারসমূহ ও শিডিউল (১:N)</th>
+                  <th className="p-3 text-center text-[11px]">স্ট্যাটাস (Status)</th>
+                  <th className="p-3 text-center text-[11px]">অ্যাকশন</th>
+                </tr>
+              </thead>
+              <tbody className="text-slate-700 font-semibold text-[11px]">
+                {doctors.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="p-8 text-center text-slate-400 font-bold">
+                      কোনো চিকিৎসক নিবন্ধিত নেই। নতুন ডাক্তার যোগ করতে উপরের বাটনে ক্লিক করুন।
+                    </td>
+                  </tr>
+                ) : (
+                  doctors.map((doc) => {
+                    const docChambers = doc.chambers || [];
+                    return (
                       <tr key={doc.id} className="border-b border-slate-150 hover:bg-slate-50/50" id={`admin-doc-row-${doc.id}`}>
-                        {/* Doc Details */}
+                        {/* Doctor basic info */}
                         <td className="p-3">
-                          <p className="font-bold text-slate-800">{doc.name}</p>
-                          <p className="text-[10px] text-slate-400 mt-0.5 line-clamp-1 font-bold">{doc.degrees}</p>
-                          <div className="flex items-center gap-3 mt-1.5 flex-wrap">
-                            <div className="flex items-center gap-1.5 text-[10px] font-bold text-amber-500 bg-amber-50/50 border border-amber-100/30 rounded px-1.5 py-0.5 w-max">
-                              <span>★ {doc.rating || '5.0'}</span>
-                              <span className="text-slate-400">|</span>
-                              <span className="text-slate-500">{doc.reviewCount || 0} রিভিউ</span>
-                            </div>
-                            
-                            <div className="flex items-center gap-1.5">
-                              <button
-                                type="button"
-                                onClick={async () => {
-                                  const newStatus = doc.isActive === false ? true : false;
-                                  try {
-                                    await updateDoctorStatus(doc.id, newStatus);
-                                    setToastMsg('ডাক্তারের স্ট্যাটাস পরিবর্তন হয়েছে');
-                                    onUpdateDoctor({
-                                      ...doc,
-                                      isActive: newStatus
-                                    });
-                                  } catch (err) {
-                                    console.error('Failed to update doctor status:', err);
-                                  }
-                                }}
-                                className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                                  doc.isActive !== false ? 'bg-[#16A34A]' : 'bg-slate-300'
-                                }`}
-                                title={doc.isActive !== false ? 'নিষ্ক্রিয় করুন' : 'সক্রিয় করুন'}
-                              >
-                                <span
-                                  className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-xs ring-0 transition duration-200 ease-in-out ${
-                                    doc.isActive !== false ? 'translate-x-4' : 'translate-x-0'
-                                  }`}
-                                />
-                              </button>
-                              {doc.isActive !== false ? (
-                                <span className="inline-flex items-center rounded-md bg-emerald-50 px-1.5 py-0.5 text-[9px] font-extrabold text-[#16A34A] border border-emerald-200">
-                                  সক্রিয় (Active)
-                                </span>
-                              ) : (
-                                <span className="inline-flex items-center rounded-md bg-slate-50 px-1.5 py-0.5 text-[9px] font-extrabold text-slate-500 border border-slate-200">
-                                  নিষ্ক্রিয় (Inactive)
-                                </span>
-                              )}
-                            </div>
-                          </div>
+                          <p className="font-extrabold text-slate-900 text-xs">ডা. {doc.name}</p>
+                          <p className="text-[10px] text-slate-400 mt-0.5">{doc.designation || 'মেডিকেল অফিসার'}</p>
+                          <p className="text-[10px] text-slate-400 font-bold">{doc.workplace || ''}</p>
                         </td>
 
-                        {/* Chamber Location */}
+                        {/* Specialty & BMDC */}
                         <td className="p-3">
-                          <p className="font-bold text-slate-800">{doc.facility}</p>
-                          <p className="text-[11px] text-[#0284C7] font-bold mt-0.5">
-                            রুম: {doc.chamberRoomNo || 'নির্ধারিত নয়'} • {doc.chamberFloor || 'নিচতলা'}
-                          </p>
-                          <p className="text-[10px] text-slate-400 font-medium">{doc.chamberBuildingStand || 'মেইন ভবন'}</p>
+                          <span className="inline-flex rounded-md bg-sky-50 px-2 py-0.5 text-[10px] font-bold text-[#0284C7] border border-sky-100">
+                            {doc.specialty}
+                          </span>
+                          <p className="text-[10px] text-slate-400 font-mono mt-1">BMDC: {doc.bmdc || 'N/A'}</p>
                         </td>
 
-                        {/* Private PS Phone */}
+                        {/* Multi Chambers Info */}
                         <td className="p-3">
-                          {doc.psPhone ? (
-                            <div className="flex items-center gap-1.5 font-mono text-xs font-bold text-amber-800 bg-amber-50 border border-amber-200/60 rounded px-2 py-1 w-max">
-                              <Lock className="h-3 w-3 text-amber-600 shrink-0" />
-                              <span>{doc.psPhone}</span>
+                          {docChambers.length === 0 ? (
+                            <div className="space-y-1">
+                              <p className="text-slate-700 font-bold">{doc.facility || 'N/A'}</p>
+                              <p className="text-[10px] text-slate-400 font-medium">রুম: {doc.chamberRoomNo || ''} • {doc.visitingTime}</p>
+                              <span className="inline-flex rounded bg-amber-50 px-1.5 py-0.2 text-[9px] font-bold text-amber-700 border border-amber-100">সিঙ্গেল-চেম্বার (Legacy)</span>
                             </div>
                           ) : (
-                            <span className="text-slate-300 font-bold text-[10px]">দেওয়া হয়নি</span>
+                            <div className="space-y-2">
+                              {docChambers.map((ch, idx) => (
+                                <div key={ch.id || idx} className="border-l-2 border-sky-500 pl-2 py-0.5">
+                                  <p className="text-slate-800 font-extrabold text-[11px]">{ch.facilityName}</p>
+                                  <p className="text-[10px] text-slate-400 font-bold">
+                                    রুম: {ch.roomNo || 'N/A'} • {ch.visitingTime || 'N/A'}
+                                  </p>
+                                  <p className="text-[9px] text-slate-400 font-medium">
+                                    দিন: {Array.isArray(ch.visitingDays) ? ch.visitingDays.join(', ') : ch.visitingDays}
+                                  </p>
+                                </div>
+                              ))}
+                            </div>
                           )}
                         </td>
 
-                        {/* Specialty */}
-                        <td className="p-3">
-                          <span className="inline-flex rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-600 border border-slate-200/50">
-                            {doc.specialty}
-                          </span>
+                        {/* Status Active/Deactive Toggle */}
+                        <td className="p-3 text-center">
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              try {
+                                const newStatus = doc.isActive === false;
+                                await updateDoctorStatus(doc.id, newStatus);
+                                onUpdateDoctor({ ...doc, isActive: newStatus });
+                                setToastMsg(newStatus ? 'ডাক্তারের অ্যাকাউন্ট সক্রিয় করা হয়েছে' : 'ডাক্তারের অ্যাকাউন্ট নিষ্ক্রিয় করা হয়েছে');
+                              } catch (err: any) {
+                                alert(err.message || 'স্ট্যাটাস পরিবর্তন ব্যর্থ হয়েছে।');
+                              }
+                            }}
+                            className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-black transition cursor-pointer border ${
+                              doc.isActive !== false
+                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                                : 'bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200'
+                            }`}
+                            id={`admin-doc-toggle-status-${doc.id}`}
+                          >
+                            <span className={`h-1.5 w-1.5 rounded-full ${doc.isActive !== false ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`}></span>
+                            <span>{doc.isActive !== false ? 'সক্রিয় (Active)' : 'নিষ্ক্রিয় (Inactive)'}</span>
+                          </button>
                         </td>
 
-                        {/* Fee */}
-                        <td className="p-3 font-bold text-[#0D9488]">৳ {doc.feesNew}</td>
-
                         {/* Actions */}
-                        <td className="p-3">
+                        <td className="p-3 text-center">
                           <div className="flex items-center justify-center gap-1.5">
                             {/* Edit Button */}
                             <button
@@ -1734,7 +1214,7 @@ export default function AdminDashboard({
                                   onDeleteDoctor(doc.id);
                                 }
                               }}
-                              className="flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 text-rose-600 hover:bg-slate-50 transition cursor-pointer"
+                              className="flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 text-rose-600 hover:bg-rose-50 transition cursor-pointer"
                               title="Delete Doctor"
                               id={`admin-doc-delete-${doc.id}`}
                             >
@@ -1743,11 +1223,11 @@ export default function AdminDashboard({
                           </div>
                         </td>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
       )}
@@ -2555,13 +2035,23 @@ export default function AdminDashboard({
                       </td>
                       <td className="p-3 text-slate-500 text-xs font-semibold truncate max-w-xs">{banner.targetUrl || 'কোন লিংক নেই'}</td>
                       <td className="p-3">
-                        <span className={`inline-flex rounded-full px-2 py-0.5 text-[9px] ${
-                          banner.isActive
-                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                            : 'bg-slate-100 text-slate-400 border border-slate-200'
-                        }`}>
-                          {banner.isActive ? 'সক্রিয় (Active)' : 'নিষ্ক্রিয়'}
-                        </span>
+                        <button
+                          onClick={async () => {
+                            const currentActive = (banner.is_active ?? banner.isActive) !== false;
+                            const nextActive = !currentActive;
+                            setBannersList(prev => prev.map(b => b.id === banner.id ? { ...b, isActive: nextActive, is_active: nextActive } : b));
+                            await togglePromoBannerActive(banner.id, nextActive);
+                          }}
+                          className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold cursor-pointer transition ${
+                            (banner.is_active ?? banner.isActive) !== false
+                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100'
+                              : 'bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100'
+                          }`}
+                          title="১-ক্লিকে Show/Hide সক্রিয় অথবা হাইড করুন"
+                        >
+                          {(banner.is_active ?? banner.isActive) !== false ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
+                          <span>{(banner.is_active ?? banner.isActive) !== false ? 'সক্রিয় (Shown)' : 'হাইড (Hidden)'}</span>
+                        </button>
                       </td>
                       <td className="p-3">
                         <div className="flex items-center justify-center gap-2">
@@ -2569,10 +2059,17 @@ export default function AdminDashboard({
                             onClick={() => {
                               setEditingBanner(banner);
                               setBannerTitle(banner.title);
-                              setBannerImageUrl(banner.imageUrl);
-                              setBannerTargetUrl(banner.targetUrl || '');
-                              setBannerSlot(banner.slot);
-                              setBannerIsActive(banner.isActive);
+                              setBannerImageUrl(banner.imageUrl || banner.banner_image || '');
+                              setBannerTargetUrl(banner.targetUrl || banner.target_url || '');
+                              
+                              let s = (banner.placement_slot || banner.slot || 'home_hero_top') as string;
+                              if (s === 'hero') s = 'home_hero_top';
+                              if (s === 'directory') s = 'directory_middle';
+                              if (s === 'sidebar') s = 'sidebar_rect';
+                              if (s === 'footer') s = 'footer_sticky';
+                              setBannerSlot(s as any);
+                              
+                              setBannerIsActive((banner.is_active ?? banner.isActive) !== false);
                               setShowBannerModal(true);
                             }}
                             className="inline-flex items-center gap-1 rounded bg-slate-50 border border-slate-200 text-[10px] text-slate-600 hover:border-slate-400 py-1 px-2 cursor-pointer"
@@ -2581,7 +2078,7 @@ export default function AdminDashboard({
                             <span>সম্পাদনা</span>
                           </button>
                           <button
-                            onClick={() => handleBannerDelete(banner.id, banner.title)}
+                            onClick={() => setBannerToDelete(banner)}
                             className="inline-flex items-center gap-1 rounded bg-red-50 border border-red-100 text-[10px] text-red-600 hover:bg-red-100 py-1 px-2 cursor-pointer"
                           >
                             <Trash2 className="h-3 w-3" />
@@ -2937,18 +2434,40 @@ export default function AdminDashboard({
             </div>
 
             <form onSubmit={handleConfirmAppointmentSubmit} className="p-6 space-y-4 text-xs font-semibold">
-              {/* Patient and Doctor Snapshot */}
-              <div className="grid grid-cols-2 gap-3 p-3 rounded-xl bg-slate-50 border border-slate-200/80">
-                <div>
-                  <span className="block text-[10px] font-bold text-slate-400">রোগীর নাম</span>
-                  <span className="font-bold text-slate-800 text-xs">{confirmingApp.patientName}</span>
-                  <span className="block text-[10px] text-slate-500">{confirmingApp.patientMobile}</span>
+              {/* Patient, Doctor and Hospital Snapshot */}
+              <div className="space-y-2 p-3.5 rounded-xl bg-slate-50 border border-slate-200">
+                <div className="grid grid-cols-2 gap-3 pb-2 border-b border-slate-200/60">
+                  <div>
+                    <span className="block text-[10px] font-bold text-slate-400">রোগীর নাম</span>
+                    <span className="font-extrabold text-slate-800 text-xs">{confirmingApp.patientName}</span>
+                    <span className="block text-[10px] text-slate-500 font-bold">{confirmingApp.patientMobile}</span>
+                  </div>
+                  <div>
+                    <span className="block text-[10px] font-bold text-slate-400">ডাক্তার ও আবেদনের তারিখ</span>
+                    <span className="font-extrabold text-slate-800 text-xs">{confirmingApp.doctorName}</span>
+                    <span className="block text-[10px] text-emerald-700 font-bold">{confirmingApp.preferredDate}</span>
+                  </div>
                 </div>
-                <div>
-                  <span className="block text-[10px] font-bold text-slate-400">ডাক্তার ও তারিখ</span>
-                  <span className="font-bold text-slate-800 text-xs">{confirmingApp.doctorName}</span>
-                  <span className="block text-[10px] text-slate-500">{confirmingApp.preferredDate}</span>
+                <div className="flex items-start gap-2 pt-1 text-[#0284C7] bg-sky-50/70 p-2 rounded-lg border border-sky-100">
+                  <Building className="h-4 w-4 shrink-0 mt-0.5 text-[#0284C7]" />
+                  <div>
+                    <span className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">আবেদনকৃত হাসপাতাল / চেম্বার</span>
+                    <span className="font-extrabold text-slate-800 text-xs">{confFacilityName || confirmingApp.facilityName || 'পপুলার ডায়াগনস্টিক সেন্টার'}</span>
+                  </div>
                 </div>
+              </div>
+
+              {/* Hospital / Facility Name Edit Input */}
+              <div>
+                <label className="block text-[#0284C7] mb-1 font-bold">হাসপাতাল / ডায়াগনস্টিক সেন্টারের নাম (Facility Name) *</label>
+                <input
+                  type="text"
+                  required
+                  value={confFacilityName}
+                  onChange={(e) => setConfFacilityName(e.target.value)}
+                  className="w-full rounded-lg border border-slate-300 bg-white py-2 px-3 text-xs font-bold text-slate-800 outline-none focus:border-[#0284C7] focus:ring-1 focus:ring-[#0284C7]"
+                  placeholder="যেমন: পপুলার ডায়াগনস্টিক সেন্টার, রাজশাহী"
+                />
               </div>
 
               {/* Serial and Room */}
@@ -3226,13 +2745,63 @@ export default function AdminDashboard({
                 </div>
 
                 <div>
-                  <label className="block text-slate-500 mb-1 font-bold">কভার ছবির লিংক (Image URL)</label>
+                  <label className="block text-[#0284C7] mb-1 font-bold">কভার ছবি (Cover Image) *</label>
+                  <div className="flex items-center gap-3">
+                    {blogCoverImage && (
+                      <img
+                        src={blogCoverImage}
+                        alt="Preview"
+                        className="h-10 w-16 object-cover rounded border border-slate-200"
+                        referrerPolicy="no-referrer"
+                      />
+                    )}
+                    <div className="flex-1 relative">
+                      <input
+                        type="file"
+                        id="blog-cover-upload"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            setBlogImageUploading(true);
+                            try {
+                              const url = await uploadImage(file, 'blog-images');
+                              setBlogCoverImage(url);
+                            } catch (err: any) {
+                              alert(err.message || 'ছবি আপলোড ব্যর্থ হয়েছে।');
+                            } finally {
+                              setBlogImageUploading(false);
+                            }
+                          }
+                        }}
+                      />
+                      <button
+                        type="button"
+                        disabled={blogImageUploading}
+                        onClick={() => document.getElementById('blog-cover-upload')?.click()}
+                        className="w-full flex items-center justify-center gap-2 rounded-lg border-2 border-dashed border-slate-300 hover:border-[#0284C7] py-1.5 px-3 text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 transition cursor-pointer"
+                      >
+                        {blogImageUploading ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin text-[#0284C7]" />
+                            <span>আপলোড হচ্ছে...</span>
+                          </>
+                        ) : (
+                          <>
+                            <ImageIcon className="h-4 w-4 text-slate-400" />
+                            <span>ছবি আপলোড করুন (Max 3MB)</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
                   <input
                     type="text"
                     value={blogCoverImage}
                     onChange={(e) => setBlogCoverImage(e.target.value)}
-                    className="w-full rounded-lg border border-slate-200 bg-slate-50/50 py-2 px-3 text-xs font-bold text-slate-800 outline-none focus:border-[#0284C7] focus:bg-white"
-                    placeholder="Unsplash ছবির লিঙ্ক"
+                    className="w-full rounded-lg border border-slate-200 bg-slate-50/50 py-1 px-2.5 text-[10px] font-semibold text-slate-500 outline-none focus:border-[#0284C7] focus:bg-white mt-1.5"
+                    placeholder="অথবা সরাসরি ছবির লিঙ্ক (URL) দিন"
                   />
                 </div>
               </div>
@@ -3328,14 +2897,64 @@ export default function AdminDashboard({
               </div>
 
               <div>
-                <label className="block text-[#0284C7] mb-1 font-bold">ব্যানার ইমেজ লিংক (Image URL) *</label>
+                <label className="block text-[#0284C7] mb-1 font-bold">ব্যানার ছবি (Banner Image) *</label>
+                <div className="flex items-center gap-3">
+                  {bannerImageUrl && (
+                    <img
+                      src={bannerImageUrl}
+                      alt="Banner Preview"
+                      className="h-10 w-20 object-cover rounded border border-slate-200"
+                      referrerPolicy="no-referrer"
+                    />
+                  )}
+                  <div className="flex-1 relative">
+                    <input
+                      type="file"
+                      id="banner-image-upload"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          setBannerImageUploading(true);
+                          try {
+                            const url = await uploadImage(file, 'banner-images');
+                            setBannerImageUrl(url);
+                          } catch (err: any) {
+                            alert(err.message || 'ব্যানার ছবি আপলোড ব্যর্থ হয়েছে।');
+                          } finally {
+                            setBannerImageUploading(false);
+                          }
+                        }
+                      }}
+                    />
+                    <button
+                      type="button"
+                      disabled={bannerImageUploading}
+                      onClick={() => document.getElementById('banner-image-upload')?.click()}
+                      className="w-full flex items-center justify-center gap-2 rounded-lg border-2 border-dashed border-slate-300 hover:border-[#0284C7] py-1.5 px-3 text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 transition cursor-pointer"
+                    >
+                      {bannerImageUploading ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin text-[#0284C7]" />
+                          <span>আপলোড হচ্ছে...</span>
+                        </>
+                      ) : (
+                        <>
+                          <ImageIcon className="h-4 w-4 text-slate-400" />
+                          <span>ছবি আপলোড করুন (Max 3MB)</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
                 <input
                   type="text"
                   required
                   value={bannerImageUrl}
                   onChange={(e) => setBannerImageUrl(e.target.value)}
-                  className="w-full rounded-lg border border-slate-200 bg-slate-50/50 py-2 px-3 text-xs font-bold text-slate-800 outline-none focus:border-[#0284C7] focus:bg-white"
-                  placeholder="যেমন: https://images.unsplash.com/photo-1505751172876-fa1923c5c528"
+                  className="w-full rounded-lg border border-slate-200 bg-slate-50/50 py-1 px-2.5 text-[10px] font-semibold text-slate-500 outline-none focus:border-[#0284C7] focus:bg-white mt-1.5"
+                  placeholder="অথবা সরাসরি ছবির লিঙ্ক (URL) দিন"
                 />
               </div>
 
@@ -3346,10 +2965,10 @@ export default function AdminDashboard({
                   onChange={(e) => setBannerSlot(e.target.value as any)}
                   className="w-full rounded-lg border border-slate-200 bg-white py-2 px-3 text-xs font-bold text-slate-800 outline-none focus:border-[#0284C7]"
                 >
-                  <option value="hero">হিরো স্লট (Landing page top)</option>
-                  <option value="directory">ডিরেক্টরি স্লট (Doctor search page top)</option>
-                  <option value="sidebar">সাইডবার স্লট (Sidebar Ad space)</option>
-                  <option value="footer">ফুটার স্লট (Page footer row)</option>
+                  <option value="home_hero_top">home_hero_top (প্রস্তাবিত: 1200 x 300 px)</option>
+                  <option value="directory_middle">directory_middle (প্রস্তাবিত: 1100 x 180 px)</option>
+                  <option value="sidebar_rect">sidebar_rect (প্রস্তাবিত: 300 x 250 px)</option>
+                  <option value="footer_sticky">footer_sticky (প্রস্তাবিত: 728 x 90 px)</option>
                 </select>
               </div>
 
@@ -3400,6 +3019,57 @@ export default function AdminDashboard({
         </div>
       )}
 
+      {/* Doctor Form Modal (Supports multi-chamber configuration) */}
+      <DoctorFormModal
+        isOpen={showDoctorModal}
+        onClose={() => {
+          setShowDoctorModal(false);
+          setEditingDoctor(null);
+        }}
+        doctor={editingDoctor}
+        specialties={specialties}
+        facilities={facilities}
+        districts={districts}
+        onSave={handleSaveDoctor}
+      />
+
+      {/* Banner Delete Confirmation Modal */}
+      {bannerToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 animate-in fade-in duration-100">
+          <div className="w-full max-w-sm bg-white rounded-2xl border border-slate-200 shadow-2xl p-6 text-center animate-in zoom-in-95 duration-150">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-red-100 text-red-600 mb-4">
+              <Trash2 className="h-6 w-6" />
+            </div>
+            <h3 className="text-base font-extrabold text-slate-900">ব্যানারটি মুছে ফেলতে চান?</h3>
+            <p className="text-xs text-slate-500 mt-1 font-bold">
+              "{bannerToDelete.title}" ব্যানারটি সিস্টেম থেকে স্থায়ীভাবে মুছে ফেলা হবে।
+            </p>
+            <div className="flex justify-center gap-3 mt-6">
+              <button
+                onClick={() => setBannerToDelete(null)}
+                className="rounded-lg border border-slate-200 px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 cursor-pointer"
+              >
+                বাতিল
+              </button>
+              <button
+                onClick={async () => {
+                  const targetId = bannerToDelete.id;
+                  setBannersList(prev => prev.filter(b => b.id !== targetId));
+                  setBannerToDelete(null);
+                  setToastMsg('ব্যানার সফলভাবে মুছে ফেলা হয়েছে!');
+                  await deletePromoBanner(targetId);
+                  const updated = await getPromoBanners();
+                  setBannersList(updated);
+                }}
+                className="rounded-lg bg-red-600 hover:bg-red-700 px-4 py-2 text-xs font-bold text-white cursor-pointer shadow-sm"
+              >
+                হ্যাঁ, ডিলিট করুন
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Dynamic Slide-in Toast Feedback */}
       {toastMsg && (
         <div className="fixed bottom-5 right-5 z-50 flex items-center gap-2 rounded-lg bg-slate-900 text-white px-4 py-3 text-xs font-bold shadow-lg border border-slate-800 animate-in fade-in slide-in-from-bottom-5 duration-200">
@@ -3407,6 +3077,6 @@ export default function AdminDashboard({
           <span>{toastMsg}</span>
         </div>
       )}
-    </div>
+    </AdminLayout>
   );
 }

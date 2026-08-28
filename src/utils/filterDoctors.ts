@@ -98,7 +98,7 @@ export function filterDoctorsList(
       const docFac = (doc.facility || '').toLowerCase();
       const docFacName = (doc.facilityName || '').toLowerCase();
 
-      const matchesFacility = 
+      const matchesPrimary = 
         doc.facilityName === selectedFacility || 
         doc.facilityId === selectedFacility ||
         doc.facility === selectedFacility ||
@@ -107,7 +107,17 @@ export function filterDoctorsList(
         facNorm.includes(docFacName) ||
         facNorm.includes(docFac);
 
-      if (!matchesFacility) return false;
+      const matchesChambers = doc.chambers?.some(ch => {
+        const chFacName = (ch.facilityName || '').toLowerCase();
+        const chFacAddr = (ch.facilityAddress || '').toLowerCase();
+        return ch.facilityName === selectedFacility ||
+               ch.facilityId === selectedFacility ||
+               chFacName.includes(facNorm) ||
+               chFacAddr.includes(facNorm) ||
+               facNorm.includes(chFacName);
+      });
+
+      if (!matchesPrimary && !matchesChambers) return false;
     }
 
     // 4. District Filter
@@ -123,7 +133,7 @@ export function filterDoctorsList(
         d => d.nameBn === selectedDistrict || d.id === selectedDistrict || d.nameEn?.toLowerCase() === distNorm
       );
 
-      const matchesDistrict = 
+      const matchesPrimary = 
         doc.facilityDistrictId === selectedDistrict ||
         (currentDistrictObj ? (doc.facilityDistrictId === currentDistrictObj.id || doc.facilityDistrictId === currentDistrictObj.nameBn) : false) ||
         (doc.facilityAddress || '').includes(selectedDistrict) ||
@@ -131,13 +141,21 @@ export function filterDoctorsList(
         (doc.chamberAddress || '').includes(selectedDistrict) ||
         (doc.workplace || '').includes(selectedDistrict);
 
-      if (!matchesDistrict) return false;
+      const matchesChambers = doc.chambers?.some(ch => 
+        (ch.facilityAddress || '').includes(selectedDistrict) ||
+        (ch.facilityName || '').includes(selectedDistrict)
+      );
+
+      if (!matchesPrimary && !matchesChambers) return false;
     }
 
     // 5. Visiting Days Filter
     if (selectedDays && selectedDays.length > 0) {
-      const matchesDays = selectedDays.some(day => (doc.visitingDays || []).includes(day));
-      if (!matchesDays) return false;
+      const matchesPrimaryDays = selectedDays.some(day => (doc.visitingDays || []).includes(day));
+      const matchesChamberDays = doc.chambers?.some(ch => 
+        selectedDays.some(day => (ch.visitingDays || []).includes(day))
+      );
+      if (!matchesPrimaryDays && !matchesChamberDays) return false;
     }
 
     return true;

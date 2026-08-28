@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { Doctor, Review } from '../types';
 import { getReviews, submitVerifiedPatientReview } from '../lib/supabase';
+import PromoBannerComponent from './PromoBanner';
 
 interface DoctorProfileModalProps {
   doctor: Doctor | null;
@@ -124,11 +125,13 @@ export default function DoctorProfileModal({
 
   if (!isOpen || !doctor) return null;
 
-  const averageRating = reviews.length > 0
-    ? (reviews.reduce((acc, r) => acc + r.rating, 0) / reviews.length).toFixed(1)
-    : (doctor.rating || 5.0).toFixed(1);
-
   const approvedReviews = reviews.filter(r => r.isApproved !== false);
+  const totalReviewCount = (doctor.reviewCount || 0) + approvedReviews.length;
+  const displayRating = doctor.rating !== undefined && doctor.rating !== null && doctor.rating > 0
+    ? Number(doctor.rating).toFixed(1)
+    : (approvedReviews.length > 0
+        ? (approvedReviews.reduce((acc, r) => acc + r.rating, 0) / approvedReviews.length).toFixed(1)
+        : '5.0');
 
   const jsonLdData = {
     "@context": "https://schema.org",
@@ -145,8 +148,8 @@ export default function DoctorProfileModal({
     },
     "aggregateRating": {
       "@type": "AggregateRating",
-      "ratingValue": averageRating,
-      "reviewCount": Math.max(1, approvedReviews.length || doctor.reviewCount || 1),
+      "ratingValue": displayRating,
+      "reviewCount": Math.max(1, totalReviewCount),
       "bestRating": "5",
       "worstRating": "1"
     },
@@ -220,11 +223,11 @@ export default function DoctorProfileModal({
             <div className="flex sm:flex-col items-center sm:items-end justify-between w-full sm:w-auto pt-3 sm:pt-0 border-t sm:border-t-0 border-slate-200">
               <div className="flex items-center gap-1.5 bg-amber-50 px-3 py-1.5 rounded-lg border border-amber-200">
                 <Star className="h-4 w-4 fill-amber-400 text-amber-500" />
-                <span className="text-sm font-extrabold text-amber-900">{averageRating}</span>
+                <span className="text-sm font-extrabold text-amber-900">{displayRating}</span>
                 <span className="text-[11px] text-amber-700 font-semibold">/ ৫.০</span>
               </div>
               <span className="text-[10px] font-bold text-slate-400 mt-1">
-                ({approvedReviews.length || doctor.reviewCount || 0} টি ভেরিফাইড রিভিউ)
+                ({totalReviewCount} টি ভেরিফাইড রিভিউ)
               </span>
             </div>
           </div>
@@ -242,45 +245,63 @@ export default function DoctorProfileModal({
             </div>
           )}
 
+          {/* Promo Ad Banner inside Doctor Profile */}
+          <PromoBannerComponent slot="sidebar_rect" className="shadow-xs" />
+
           {/* Chamber & Location Breakdown (Room, Floor, Building) */}
           <div className="rounded-xl border border-slate-200 bg-white p-5 space-y-4 shadow-xs">
             <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-2">
               <Building className="h-4 w-4 text-[#0284C7]" />
-              <span>চেম্বার ও সিরিয়াল সংক্রান্ত তথ্য</span>
+              <span>চেম্বার ও সিরিয়াল সংক্রান্ত তথ্য ({doctor.chambers?.length || 1} টি চেম্বার)</span>
             </h3>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-              <div className="p-3 rounded-lg bg-slate-50 border border-slate-200/60">
-                <span className="block text-[10px] font-bold text-slate-400 uppercase">হাসপাতাল / ডায়াগনস্টিক</span>
-                <span className="text-xs font-bold text-slate-800 mt-0.5 block">{doctor.facilityName || doctor.facility}</span>
-                <span className="text-[10px] text-slate-500 font-medium">{doctor.chamberAddress || doctor.facilityAddress}</span>
-              </div>
+            {(doctor.chambers && doctor.chambers.length > 0 ? doctor.chambers : [{
+              id: 'primary',
+              facilityName: doctor.facilityName || doctor.facility,
+              facilityAddress: doctor.facilityAddress || doctor.chamberAddress,
+              roomNo: doctor.chamberRoomNo,
+              floor: doctor.chamberFloor,
+              buildingStand: doctor.chamberBuildingStand,
+              visitingDays: doctor.visitingDays,
+              visitingTime: doctor.visitingTime,
+              feeNew: doctor.feesNew,
+              feeOld: doctor.feesOld
+            }]).map((ch, idx) => (
+              <div key={ch.id || idx} className={`space-y-3 ${idx > 0 ? 'pt-4 border-t border-slate-200' : ''}`}>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                  <div className="p-3 rounded-lg bg-slate-50 border border-slate-200/60">
+                    <span className="block text-[10px] font-bold text-slate-400 uppercase">হাসপাতাল / ডায়াগনস্টিক</span>
+                    <span className="text-xs font-bold text-slate-800 mt-0.5 block">{ch.facilityName || 'চেম্বার'}</span>
+                    <span className="text-[10px] text-slate-500 font-medium">{ch.facilityAddress}</span>
+                  </div>
 
-              <div className="p-3 rounded-lg bg-sky-50/50 border border-sky-100">
-                <span className="block text-[10px] font-bold text-[#0284C7] uppercase">কক্ষ ও ফ্লোর নম্বর</span>
-                <div className="text-xs font-extrabold text-slate-800 mt-0.5">
-                  রুম: {doctor.chamberRoomNo || 'নির্ধারিত নয়'} | ফ্লোর: {doctor.chamberFloor || 'নিচতলা'}
+                  <div className="p-3 rounded-lg bg-sky-50/50 border border-sky-100">
+                    <span className="block text-[10px] font-bold text-[#0284C7] uppercase">কক্ষ ও ফ্লোর নম্বর</span>
+                    <div className="text-xs font-extrabold text-slate-800 mt-0.5">
+                      রুম: {ch.roomNo || 'নির্ধারিত নয়'} | ফ্লোর: {ch.floor || 'নিচতলা'}
+                    </div>
+                    <span className="text-[10px] text-sky-700 font-semibold block mt-0.5">
+                      স্ট্যান্ড / উইং: {ch.buildingStand || 'মেইন ভবন'}
+                    </span>
+                  </div>
+
+                  <div className="p-3 rounded-lg bg-slate-50 border border-slate-200/60">
+                    <span className="block text-[10px] font-bold text-slate-400 uppercase">রোগী দেখার সময় ও ফি</span>
+                    <div className="text-xs font-bold text-slate-800 mt-0.5">
+                      ফি: ৳{ch.feeNew || 0} (নতুন) / ৳{ch.feeOld || 0} (পুরাতন)
+                    </div>
+                    <span className="text-[10px] text-slate-600 font-medium block mt-0.5">
+                      সময়: {ch.visitingTime}
+                    </span>
+                  </div>
                 </div>
-                <span className="text-[10px] text-sky-700 font-semibold block mt-0.5">
-                  স্ট্যান্ড / উইং: {doctor.chamberBuildingStand || 'মেইন ভবন'}
-                </span>
-              </div>
 
-              <div className="p-3 rounded-lg bg-slate-50 border border-slate-200/60">
-                <span className="block text-[10px] font-bold text-slate-400 uppercase">রোগী দেখার সময় ও ফি</span>
-                <div className="text-xs font-bold text-slate-800 mt-0.5">
-                  ফি: ৳{doctor.feesNew} (নতুন) / ৳{doctor.feesOld} (পুরাতন)
+                <div className="flex items-center gap-2 p-2.5 rounded-lg bg-emerald-50/60 border border-emerald-100 text-xs font-semibold text-emerald-800">
+                  <Calendar className="h-4 w-4 text-emerald-600 shrink-0" />
+                  <span>রোগী দেখার দিনসমূহ: {Array.isArray(ch.visitingDays) ? ch.visitingDays.join(', ') : 'সবদিন'}</span>
                 </div>
-                <span className="text-[10px] text-slate-600 font-medium block mt-0.5">
-                  সময়: {doctor.visitingTime}
-                </span>
               </div>
-            </div>
-
-            <div className="flex items-center gap-2 p-2.5 rounded-lg bg-emerald-50/60 border border-emerald-100 text-xs font-semibold text-emerald-800">
-              <Calendar className="h-4 w-4 text-emerald-600 shrink-0" />
-              <span>রোগী দেখার দিনসমূহ: {doctor.visitingDays.join(', ')}</span>
-            </div>
+            ))}
           </div>
 
           {/* Reviews & Ratings Section */}
@@ -289,7 +310,7 @@ export default function DoctorProfileModal({
               <div>
                 <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-2">
                   <Star className="h-4 w-4 fill-amber-400 text-amber-500" />
-                  <span>রোগীদের রিভিউ ও রেটিং ({approvedReviews.length})</span>
+                  <span>রোগীদের রিভিউ ও রেটিং ({totalReviewCount})</span>
                 </h3>
                 <p className="text-[11px] text-slate-400 font-medium mt-0.5">
                   ১০০% যাচাইকৃত রোগীদের বাস্তব অভিজ্ঞতা ও মূল্যায়ন

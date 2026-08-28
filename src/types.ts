@@ -26,6 +26,21 @@ export interface Facility {
   districtName?: string;
 }
 
+export interface Chamber {
+  id: string;
+  doctorId: string;
+  facilityId: string;
+  facilityName?: string;
+  facilityAddress?: string;
+  roomNo?: string;
+  floor?: string;
+  buildingStand?: string;
+  visitingDays: string[];
+  visitingTime: string;
+  feeNew: number;
+  feeOld: number;
+}
+
 export interface Doctor {
   id: string; // May be composite or raw ID
   doctorId?: string; // Raw UUID of the doctor
@@ -59,6 +74,7 @@ export interface Doctor {
   psPhone?: string; // Doctor's Assistant/PS secret mobile number (ADMIN ONLY)
   rating?: number;
   reviewCount?: number;
+  chambers?: Chamber[]; // Array of chambers for multi-chamber support
 }
 
 export interface Review {
@@ -72,6 +88,7 @@ export interface Review {
   reviewText?: string;
   isVerifiedPatient?: boolean;
   isApproved?: boolean;
+  isAdminCreated?: boolean;
   createdAt: string;
 }
 
@@ -84,17 +101,22 @@ export interface Appointment {
   chamberId?: string;
   facilityName?: string;
   facilityAddress?: string;
+  chamberRoomNo?: string;
+  chamberFloor?: string;
+  chamberBuildingStand?: string;
+  visitingTime?: string;
   patientName: string;
   patientAge: number;
   patientMobile: string; // mobile number
   patientPhone?: string; // mapping fallback
   preferredDate: string;
-  status: 'Pending' | 'Confirmed' | 'Cancelled' | 'Rejected';
+  status: 'Pending' | 'Confirmed' | 'Cancelled' | 'Rejected' | 'Completed';
   serialNo?: string;
   assignedRoomNo?: string;
   assignedFloor?: string; // e.g., "৩য় তলা"
   assignedBuilding?: string; // e.g., "বিল্ডিং-বি, পূর্ব গেট স্ট্যান্ড"
   confirmedVisitingTime?: string;
+  specialInstructions?: string;
   rejectionReason?: string;
   adminNotes?: string;
   createdAt: string;
@@ -116,14 +138,23 @@ export interface BlogPost {
   updatedAt?: string;
 }
 
+export type BannerPlacementSlot = 'home_hero_top' | 'directory_middle' | 'sidebar_rect' | 'footer_sticky' | 'hero' | 'directory' | 'sidebar' | 'footer';
+
 export interface PromoBanner {
   id: string;
   title: string;
   imageUrl: string;
+  banner_image?: string;
   targetUrl?: string;
-  slot: 'hero' | 'directory' | 'sidebar' | 'footer';
+  target_url?: string;
+  slot: BannerPlacementSlot;
+  placement_slot?: BannerPlacementSlot;
   isActive: boolean;
+  is_active?: boolean;
+  displayOrder?: number;
+  display_order?: number;
   createdAt: string;
+  updatedAt?: string;
 }
 
 export type ActiveTab = 'home' | 'doctors' | 'track' | 'admin' | 'portal-login' | 'about' | 'terms' | 'privacy' | 'faq' | 'blog';
