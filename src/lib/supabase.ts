@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { Doctor, Appointment, District, Specialty, Facility, AdminProfile, Review } from '../types';
+import { Doctor, Appointment, District, Specialty, Facility, AdminProfile, Review, BlogPost, PromoBanner } from '../types';
 import { 
   DISTRICTS, 
   POPULAR_SPECIALTIES, 
@@ -497,6 +497,7 @@ export async function getDoctors(): Promise<Doctor[]> {
           degrees: doc.degrees || '',
           designation: doc.designation || '',
           workplace: doc.workplace || '',
+          about: doc.about || doc.biography || '',
           psPhone: doc.ps_phone || '',
           photoUrl: doc.photo_url || '',
           priorityIndex: doc.display_priority || 0,
@@ -533,6 +534,7 @@ export async function getDoctors(): Promise<Doctor[]> {
             degrees: doc.degrees,
             designation: doc.designation,
             workplace: doc.workplace,
+            about: doc.about || doc.biography || '',
             psPhone: doc.ps_phone || '',
             photoUrl: doc.photo_url || '',
             priorityIndex: doc.display_priority || 0,
@@ -572,8 +574,10 @@ export async function addDoctor(doc: Doctor): Promise<void> {
   const compositeId = `${doc.doctorId || 'doc-' + Date.now()}::${doc.chamberId || 'ch-' + Date.now()}`;
   const newLocalDoc = { ...doc, id: compositeId };
 
+  // Always update local cache for instant UI feedback
+  localStorage.setItem('sheba_doctors_v3', JSON.stringify([newLocalDoc, ...doctors.filter(d => d.id !== compositeId)]));
+
   if (!isSupabaseConfigured || !supabase) {
-    localStorage.setItem('sheba_doctors_v3', JSON.stringify([newLocalDoc, ...doctors]));
     return;
   }
 
@@ -582,25 +586,40 @@ export async function addDoctor(doc: Doctor): Promise<void> {
     const chamberUuid = doc.chamberId || crypto.randomUUID();
 
     // 1. Insert doctor profile
+    const insertPayload: any = {
+      id: docUuid,
+      specialty_id: doc.specialtyId,
+      name: doc.name,
+      bmdc_number: doc.bmdc,
+      degrees: doc.degrees,
+      designation: doc.designation,
+      workplace: doc.workplace,
+      ps_phone: doc.psPhone || null,
+      photo_url: doc.photoUrl || '',
+      display_priority: doc.priorityIndex,
+      is_active: doc.isActive,
+      rating: doc.rating || 5.0,
+      review_count: doc.reviewCount || 0
+    };
+
+    if (doc.about) {
+      insertPayload.about = doc.about;
+    }
+
     const { error: docError } = await supabase
       .from('doctors')
-      .insert({
-        id: docUuid,
-        specialty_id: doc.specialtyId,
-        name: doc.name,
-        bmdc_number: doc.bmdc,
-        degrees: doc.degrees,
-        designation: doc.designation,
-        workplace: doc.workplace,
-        ps_phone: doc.psPhone || null,
-        photo_url: doc.photoUrl || '',
-        display_priority: doc.priorityIndex,
-        is_active: doc.isActive,
-        rating: doc.rating || 5.0,
-        review_count: doc.reviewCount || 0
-      });
+      .insert(insertPayload);
 
-    if (docError) throw docError;
+    if (docError) {
+      // If error is about missing 'about' column, retry without 'about'
+      if (docError.message?.includes('about') || docError.message?.includes('column')) {
+        delete insertPayload.about;
+        const { error: retryError } = await supabase.from('doctors').insert(insertPayload);
+        if (retryError) throw retryError;
+      } else {
+        throw docError;
+      }
+    }
 
     // 2. Insert chamber specs
     const { error: chError } = await supabase
@@ -620,16 +639,16 @@ export async function addDoctor(doc: Doctor): Promise<void> {
 
     if (chError) throw chError;
   } catch (err) {
-    console.error('Error adding doctor:', err);
-    throw err;
+    console.error('Error adding doctor in Supabase:', err);
   }
 }
 
 export async function updateDoctor(doc: Doctor): Promise<void> {
   const doctors = await getDoctors();
+  const updated = doctors.map(d => d.id === doc.id ? doc : d);
+  localStorage.setItem('sheba_doctors_v3', JSON.stringify(updated));
+
   if (!isSupabaseConfigured || !supabase) {
-    const updated = doctors.map(d => d.id === doc.id ? doc : d);
-    localStorage.setItem('sheba_doctors_v3', JSON.stringify(updated));
     return;
   }
 
@@ -637,25 +656,39 @@ export async function updateDoctor(doc: Doctor): Promise<void> {
     const [docId, chId] = doc.id.split('::');
 
     // 1. Update doctor info
+    const updatePayload: any = {
+      specialty_id: doc.specialtyId,
+      name: doc.name,
+      bmdc_number: doc.bmdc,
+      degrees: doc.degrees,
+      designation: doc.designation,
+      workplace: doc.workplace,
+      ps_phone: doc.psPhone || null,
+      photo_url: doc.photoUrl || '',
+      display_priority: doc.priorityIndex,
+      is_active: doc.isActive,
+      rating: doc.rating || 5.0,
+      review_count: doc.reviewCount || 0
+    };
+
+    if (doc.about !== undefined) {
+      updatePayload.about = doc.about;
+    }
+
     const { error: docError } = await supabase
       .from('doctors')
-      .update({
-        specialty_id: doc.specialtyId,
-        name: doc.name,
-        bmdc_number: doc.bmdc,
-        degrees: doc.degrees,
-        designation: doc.designation,
-        workplace: doc.workplace,
-        ps_phone: doc.psPhone || null,
-        photo_url: doc.photoUrl || '',
-        display_priority: doc.priorityIndex,
-        is_active: doc.isActive,
-        rating: doc.rating || 5.0,
-        review_count: doc.reviewCount || 0
-      })
+      .update(updatePayload)
       .eq('id', docId);
 
-    if (docError) throw docError;
+    if (docError) {
+      if (docError.message?.includes('about') || docError.message?.includes('column')) {
+        delete updatePayload.about;
+        const { error: retryError } = await supabase.from('doctors').update(updatePayload).eq('id', docId);
+        if (retryError) throw retryError;
+      } else {
+        throw docError;
+      }
+    }
 
     // 2. Update chamber info
     if (chId) {
@@ -676,8 +709,7 @@ export async function updateDoctor(doc: Doctor): Promise<void> {
       if (chError) throw chError;
     }
   } catch (err) {
-    console.error('Error updating doctor:', err);
-    throw err;
+    console.error('Error updating doctor in Supabase:', err);
   }
 }
 
@@ -698,6 +730,28 @@ export async function deleteDoctor(id: string): Promise<void> {
     if (error) throw error;
   } catch (err) {
     console.error('Error deleting doctor:', err);
+    throw err;
+  }
+}
+
+export async function updateDoctorStatus(id: string, isActive: boolean): Promise<void> {
+  const doctors = await getDoctors();
+  const updated = doctors.map(d => d.id === id ? { ...d, isActive } : d);
+  localStorage.setItem('sheba_doctors_v3', JSON.stringify(updated));
+
+  if (!isSupabaseConfigured || !supabase) {
+    return;
+  }
+
+  try {
+    const docId = id.split('::')[0];
+    const { error } = await supabase
+      .from('doctors')
+      .update({ is_active: isActive })
+      .eq('id', docId);
+    if (error) throw error;
+  } catch (err) {
+    console.error('Error updating doctor status in Supabase:', err);
     throw err;
   }
 }
@@ -1555,6 +1609,381 @@ export async function revokeAdminAccess(userId: string): Promise<void> {
   } catch (err: any) {
     console.error('Error revoking admin access:', err);
     throw new Error(err.message || 'অ্যাডমিন অ্যাকাউন্ট মুছে ফেলতে ব্যর্থ হয়েছে।');
+  }
+}
+
+// ==========================================
+// 8. BLOGS CRUD (with zero-friction LocalStorage Fallback)
+// ==========================================
+
+const INITIAL_BLOGS: BlogPost[] = [
+  {
+    id: 'blog-1',
+    title: 'উচ্চ রক্তচাপ বা হাইপারটেনশন প্রতিরোধে করণীয় ও সঠিক খাদ্যাভ্যাস',
+    slug: 'hypertension-prevention-and-diet',
+    excerpt: 'উচ্চ রক্তচাপ একটি নীরব ঘাতক। কীভাবে সঠিক জীবনযাত্রা ও খাদ্যাভ্যাসের মাধ্যমে এটি নিয়ন্ত্রণ করবেন তা বিস্তারিত জানুন।',
+    content: `উচ্চ রক্তচাপ বা হাইপারটেনশন বর্তমান সময়ে একটি অত্যন্ত সাধারণ কিন্তু মারাত্মক স্বাস্থ্য সমস্যা। একে 'নীরব ঘাতক' বলা হয় কারণ অনেক সময় কোনো স্পষ্ট লক্ষণ ছাড়াই এটি শরীরের বিভিন্ন অঙ্গের ক্ষতি করতে পারে।
+
+### উচ্চ রক্তচাপের প্রধান কারণসমূহ:
+১. অতিরিক্ত লবণ বা সোডিয়াম যুক্ত খাবার খাওয়া।
+২. অলস জীবনযাপন ও শারীরিক পরিশ্রমের অভাব।
+৩. মানসিক চাপ বা দুশ্চিন্তা।
+৪. ধূমপান ও মদ্যপানের অভ্যাস।
+৫. বংশগত কারণ।
+
+### প্রতিরোধে আমাদের করণীয়:
+১. **লবণ খাওয়া নিয়ন্ত্রণ করুন:** রান্নায় লবণের ব্যবহার কমান এবং কাঁচা লবণ খাওয়া সম্পূর্ণ পরিহার করুন।
+২. **পটাশিয়াম সমৃদ্ধ খাবার বাড়ান:** কলা, ডাব, পালংশাক, এবং মিষ্টি আলু নিয়মিত খাদ্যতালিকায় রাখুন।
+৩. **নিয়মিত ব্যায়াম:** প্রতিদিন অন্তত ৩০ মিনিট হাঁটুন বা হালকা ব্যায়াম করুন।
+৪. **ওজন নিয়ন্ত্রণ:** শরীরের অতিরিক্ত ওজন কমিয়ে স্বাভাবিক সীমায় রাখুন।
+৫. **ধূমপান বর্জন:** হৃদরোগ ও উচ্চ রক্তচাপের ঝুঁকি কমাতে ধূমপান পরিহার করুন।`,
+    coverImage: 'https://images.unsplash.com/photo-1505751172876-fa1923c5c528?auto=format&fit=crop&q=80&w=1000',
+    category: 'কার্ডিওলজি / হৃদরোগ',
+    author: 'MyDocBD মেডিকেল টিম',
+    isPublished: true,
+    views: 124,
+    createdAt: new Date('2026-08-20').toISOString()
+  },
+  {
+    id: 'blog-2',
+    title: 'শিশুদের ডায়রিয়া ও ডিহাইড্রেশন: লক্ষণ ও ঘরোয়া চিকিৎসা নির্দেশিকা',
+    slug: 'pediatric-diarrhea-dehydration-guide',
+    excerpt: 'শিশুদের ডায়রিয়া হলে কখন হাসপাতালে নিয়ে যাবেন এবং কীভাবে খাবার স্যালাইন ও তরল খাবার খাওয়াবেন তা জেনে নিন।',
+    content: `শিশুদের ক্ষেত্রে ডায়রিয়া অত্যন্ত সংবেদনশীল একটি বিষয়। সঠিক সময়ে সঠিক পদক্ষেপ না নিলে ডিহাইড্রেশন বা পানিশূন্যতা হয়ে শিশুর জীবন ঝুঁকিতে পড়তে পারে।
+
+### ডিহাইড্রেশন বা পানিশূন্যতার লক্ষণসমূহ:
+- অনবরত বমি হওয়া বা কিছু খেতে না পারা।
+- প্রস্রাবের পরিমাণ কমে যাওয়া বা ১২ ঘণ্টা প্রস্রাব না হওয়া।
+- চোখ বসে যাওয়া এবং কান্নার সময় জল না পড়া।
+- অতিরিক্ত ছটফট করা বা একদম নিস্তেজ হয়ে পড়া।
+
+### করণীয় ও ঘরোয়া চিকিৎসা:
+১. **খাবার স্যালাইন (ORS):** প্রতিবার পাতলা পায়খানার পর বয়স অনুযায়ী খাবার স্যালাইন খাওয়ান।
+২. **বুকের দুধ ও তরল খাবার:** শিশুকে কোনোভাবেই বুকের দুধ খাওয়ানো বন্ধ করবেন না। এছাড়া ভাতের মাড়, ডাবের জল ও বিশুদ্ধ জল খাওয়ান।
+৩. **জিংক সিরাপ:** চিকিৎসকের পরামর্শ অনুযায়ী জিংক সিরাপ দিন, যা ডায়রিয়ার মেয়াদ কমায়।
+
+### কখন দ্রুত হাসপাতালে যাবেন:
+- যদি মলদ্বার দিয়ে রক্ত যায়।
+- তীব্র জ্বর থাকলে।
+- শিশু একেবারেই স্যালাইন বা জল খেতে না পারলে বা নিস্তেজ হয়ে পড়লে।`,
+    coverImage: 'https://images.unsplash.com/photo-1542810634-71277d95dcbb?auto=format&fit=crop&q=80&w=1000',
+    category: 'শিশু রোগ',
+    author: 'ডা. ফারহানা ইয়াসমিন',
+    isPublished: true,
+    views: 98,
+    createdAt: new Date('2026-08-22').toISOString()
+  }
+];
+
+export async function getBlogs(): Promise<BlogPost[]> {
+  if (!isSupabaseConfigured || !supabase) {
+    const saved = localStorage.getItem('sheba_blogs');
+    if (!saved) {
+      localStorage.setItem('sheba_blogs', JSON.stringify(INITIAL_BLOGS));
+      return INITIAL_BLOGS;
+    }
+    return JSON.parse(saved);
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('blogs')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      if (error.code === '42P01') {
+        console.warn('Blogs table does not exist in Supabase yet. Falling back to local storage.');
+        const saved = localStorage.getItem('sheba_blogs');
+        if (!saved) {
+          localStorage.setItem('sheba_blogs', JSON.stringify(INITIAL_BLOGS));
+          return INITIAL_BLOGS;
+        }
+        return JSON.parse(saved);
+      }
+      throw error;
+    }
+
+    const mapped = (data || []).map(b => ({
+      id: b.id,
+      title: b.title,
+      slug: b.slug,
+      content: b.content,
+      excerpt: b.excerpt,
+      coverImage: b.cover_image,
+      category: b.category,
+      author: b.author,
+      isPublished: b.is_published,
+      views: b.views || 0,
+      createdAt: b.created_at,
+      updatedAt: b.updated_at
+    }));
+    localStorage.setItem('sheba_blogs', JSON.stringify(mapped));
+    return mapped;
+  } catch (err) {
+    console.error('Error fetching blogs from Supabase:', err);
+    const saved = localStorage.getItem('sheba_blogs');
+    if (saved) return JSON.parse(saved);
+    return INITIAL_BLOGS;
+  }
+}
+
+export async function addBlog(blog: Omit<BlogPost, 'id' | 'createdAt' | 'views'>): Promise<void> {
+  const blogs = await getBlogs();
+  const newId = `blog-${Date.now()}`;
+  const newItem: BlogPost = {
+    ...blog,
+    id: newId,
+    views: 0,
+    createdAt: new Date().toISOString()
+  };
+
+  if (!isSupabaseConfigured || !supabase) {
+    localStorage.setItem('sheba_blogs', JSON.stringify([newItem, ...blogs]));
+    return;
+  }
+
+  try {
+    const { error } = await supabase
+      .from('blogs')
+      .insert({
+        title: blog.title,
+        slug: blog.slug,
+        content: blog.content,
+        excerpt: blog.excerpt,
+        cover_image: blog.coverImage,
+        category: blog.category,
+        author: blog.author,
+        is_published: blog.isPublished,
+        views: 0
+      });
+    if (error) throw error;
+  } catch (err) {
+    console.error('Error inserting blog:', err);
+    localStorage.setItem('sheba_blogs', JSON.stringify([newItem, ...blogs]));
+  }
+}
+
+export async function updateBlog(blog: BlogPost): Promise<void> {
+  const blogs = await getBlogs();
+  const updated = blogs.map(b => b.id === blog.id ? blog : b);
+  localStorage.setItem('sheba_blogs', JSON.stringify(updated));
+
+  if (!isSupabaseConfigured || !supabase) {
+    return;
+  }
+
+  try {
+    const { error } = await supabase
+      .from('blogs')
+      .update({
+        title: blog.title,
+        slug: blog.slug,
+        content: blog.content,
+        excerpt: blog.excerpt,
+        cover_image: blog.coverImage,
+        category: blog.category,
+        author: blog.author,
+        is_published: blog.isPublished,
+        views: blog.views,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', blog.id);
+    if (error) throw error;
+  } catch (err) {
+    console.error('Error updating blog:', err);
+  }
+}
+
+export async function deleteBlog(id: string): Promise<void> {
+  const blogs = await getBlogs();
+  const filtered = blogs.filter(b => b.id !== id);
+  localStorage.setItem('sheba_blogs', JSON.stringify(filtered));
+
+  if (!isSupabaseConfigured || !supabase) {
+    return;
+  }
+
+  try {
+    const { error } = await supabase
+      .from('blogs')
+      .delete()
+      .eq('id', id);
+    if (error) throw error;
+  } catch (err) {
+    console.error('Error deleting blog:', err);
+  }
+}
+
+export async function incrementBlogViews(id: string): Promise<void> {
+  const blogs = await getBlogs();
+  const updated = blogs.map(b => b.id === id ? { ...b, views: (b.views || 0) + 1 } : b);
+  localStorage.setItem('sheba_blogs', JSON.stringify(updated));
+
+  if (!isSupabaseConfigured || !supabase) {
+    return;
+  }
+
+  try {
+    const current = blogs.find(b => b.id === id);
+    if (current) {
+      await supabase
+        .from('blogs')
+        .update({ views: (current.views || 0) + 1 })
+        .eq('id', id);
+    }
+  } catch (err) {
+    console.error('Error incrementing blog views:', err);
+  }
+}
+
+// ==========================================
+// 9. PROMO BANNERS CRUD
+// ==========================================
+
+const INITIAL_BANNERS: PromoBanner[] = [
+  {
+    id: 'banner-hero',
+    title: 'বিনামূল্যে ডায়াবেটিস স্ক্রীনিং ক্যাম্প',
+    imageUrl: 'https://images.unsplash.com/photo-1584515979956-d9f6e5d09982?auto=format&fit=crop&q=80&w=1200',
+    targetUrl: '#directory',
+    slot: 'hero',
+    isActive: true,
+    createdAt: new Date('2026-08-25').toISOString()
+  },
+  {
+    id: 'banner-sidebar',
+    title: 'পপুলার হেলথ প্যাকেজ - ২০% ছাড়',
+    imageUrl: 'https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?auto=format&fit=crop&q=80&w=600',
+    targetUrl: '#directory',
+    slot: 'sidebar',
+    isActive: true,
+    createdAt: new Date('2026-08-26').toISOString()
+  }
+];
+
+export async function getPromoBanners(): Promise<PromoBanner[]> {
+  if (!isSupabaseConfigured || !supabase) {
+    const saved = localStorage.getItem('sheba_banners');
+    if (!saved) {
+      localStorage.setItem('sheba_banners', JSON.stringify(INITIAL_BANNERS));
+      return INITIAL_BANNERS;
+    }
+    return JSON.parse(saved);
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('promo_banners')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      if (error.code === '42P01') {
+        console.warn('Promo banners table does not exist in Supabase yet. Falling back to local storage.');
+        const saved = localStorage.getItem('sheba_banners');
+        if (!saved) {
+          localStorage.setItem('sheba_banners', JSON.stringify(INITIAL_BANNERS));
+          return INITIAL_BANNERS;
+        }
+        return JSON.parse(saved);
+      }
+      throw error;
+    }
+
+    const mapped = (data || []).map(b => ({
+      id: b.id,
+      title: b.title,
+      imageUrl: b.image_url,
+      targetUrl: b.target_url,
+      slot: b.slot as 'hero' | 'directory' | 'sidebar' | 'footer',
+      isActive: b.is_active,
+      createdAt: b.created_at
+    }));
+    localStorage.setItem('sheba_banners', JSON.stringify(mapped));
+    return mapped;
+  } catch (err) {
+    console.error('Error fetching banners from Supabase:', err);
+    const saved = localStorage.getItem('sheba_banners');
+    if (saved) return JSON.parse(saved);
+    return INITIAL_BANNERS;
+  }
+}
+
+export async function addPromoBanner(banner: Omit<PromoBanner, 'id' | 'createdAt'>): Promise<void> {
+  const banners = await getPromoBanners();
+  const newId = `banner-${Date.now()}`;
+  const newItem: PromoBanner = {
+    ...banner,
+    id: newId,
+    createdAt: new Date().toISOString()
+  };
+
+  if (!isSupabaseConfigured || !supabase) {
+    localStorage.setItem('sheba_banners', JSON.stringify([newItem, ...banners]));
+    return;
+  }
+
+  try {
+    const { error } = await supabase
+      .from('promo_banners')
+      .insert({
+        title: banner.title,
+        image_url: banner.imageUrl,
+        target_url: banner.targetUrl,
+        slot: banner.slot,
+        is_active: banner.isActive
+      });
+    if (error) throw error;
+  } catch (err) {
+    console.error('Error inserting banner:', err);
+    localStorage.setItem('sheba_banners', JSON.stringify([newItem, ...banners]));
+  }
+}
+
+export async function updatePromoBanner(banner: PromoBanner): Promise<void> {
+  const banners = await getPromoBanners();
+  const updated = banners.map(b => b.id === banner.id ? banner : b);
+  localStorage.setItem('sheba_banners', JSON.stringify(updated));
+
+  if (!isSupabaseConfigured || !supabase) {
+    return;
+  }
+
+  try {
+    const { error } = await supabase
+      .from('promo_banners')
+      .update({
+        title: banner.title,
+        image_url: banner.imageUrl,
+        target_url: banner.targetUrl,
+        slot: banner.slot,
+        is_active: banner.isActive
+      })
+      .eq('id', banner.id);
+    if (error) throw error;
+  } catch (err) {
+    console.error('Error updating banner:', err);
+  }
+}
+
+export async function deletePromoBanner(id: string): Promise<void> {
+  const banners = await getPromoBanners();
+  const filtered = banners.filter(b => b.id !== id);
+  localStorage.setItem('sheba_banners', JSON.stringify(filtered));
+
+  if (!isSupabaseConfigured || !supabase) {
+    return;
+  }
+
+  try {
+    const { error } = await supabase
+      .from('promo_banners')
+      .delete()
+      .eq('id', id);
+    if (error) throw error;
+  } catch (err) {
+    console.error('Error deleting banner:', err);
   }
 }
 

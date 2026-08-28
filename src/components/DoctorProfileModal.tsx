@@ -16,7 +16,10 @@ import {
   Phone,
   ThumbsUp,
   BadgeCheck,
-  Lock
+  Lock,
+  FileText,
+  Sparkles,
+  Info
 } from 'lucide-react';
 import { Doctor, Review } from '../types';
 import { getReviews, submitVerifiedPatientReview } from '../lib/supabase';
@@ -127,8 +130,33 @@ export default function DoctorProfileModal({
 
   const approvedReviews = reviews.filter(r => r.isApproved !== false);
 
+  const jsonLdData = {
+    "@context": "https://schema.org",
+    "@type": "Physician",
+    "name": doctor.name,
+    "description": doctor.about || doctor.degrees || `${doctor.name} - ${doctor.specialty} expert physician at MyDocBD`,
+    "image": doctor.photoUrl || "https://images.unsplash.com/photo-1505751172876-fa1923c5c528?auto=format&fit=crop&q=80&w=200",
+    "medicalSpecialty": doctor.specialty,
+    "address": {
+      "@type": "PostalAddress",
+      "streetAddress": doctor.chamberAddress || doctor.facilityAddress || "Rajshahi, Bangladesh",
+      "addressLocality": "Rajshahi",
+      "addressCountry": "BD"
+    },
+    "aggregateRating": {
+      "@type": "AggregateRating",
+      "ratingValue": averageRating,
+      "reviewCount": Math.max(1, approvedReviews.length || doctor.reviewCount || 1),
+      "bestRating": "5",
+      "worstRating": "1"
+    },
+    "priceRange": `BDT ${doctor.feesNew}`
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">
+      {/* Dynamic Schema.org SEO tags */}
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLdData) }} />
       <div 
         className="relative w-full max-w-3xl rounded-2xl bg-white shadow-2xl border border-slate-200 overflow-hidden my-8"
         id={`doctor-profile-modal-${doctor.id}`}
@@ -152,9 +180,22 @@ export default function DoctorProfileModal({
           {/* Doctor Header Profile */}
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-5 rounded-xl bg-gradient-to-br from-slate-50 to-sky-50/40 border border-slate-200/80">
             <div className="flex items-center gap-4">
-              <div className="relative flex h-16 w-16 shrink-0 items-center justify-center rounded-xl bg-white text-slate-800 font-extrabold text-lg border border-slate-200 shadow-xs">
-                {doctor.name.split(' ').filter(n => !n.includes('ডা.') && !n.includes(' can')).map(n => n[0]).slice(0, 2).join('') || 'DR'}
-                <div className="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-[#0284C7] text-white">
+              <div className="relative flex h-16 w-16 shrink-0 items-center justify-center rounded-xl bg-white text-slate-800 font-extrabold text-lg border border-slate-200 shadow-xs overflow-hidden">
+                {doctor.photoUrl ? (
+                  <img
+                    src={doctor.photoUrl}
+                    alt={doctor.name}
+                    className="h-full w-full object-cover"
+                    referrerPolicy="no-referrer"
+                    onError={(e) => {
+                      // Fallback to initials if image fails
+                      (e.target as HTMLImageElement).style.display = 'none';
+                    }}
+                  />
+                ) : (
+                  <span>{doctor.name.split(' ').filter(n => !n.includes('ডা.') && !n.includes(' can')).map(n => n[0]).slice(0, 2).join('') || 'DR'}</span>
+                )}
+                <div className="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-[#0284C7] text-white shadow-xs">
                   <ShieldCheck className="h-3.5 w-3.5" />
                 </div>
               </div>
@@ -187,6 +228,19 @@ export default function DoctorProfileModal({
               </span>
             </div>
           </div>
+
+          {/* Doctor Biography & About Section */}
+          {doctor.about && (
+            <div className="rounded-xl border border-slate-200 bg-white p-5 space-y-2.5 shadow-xs">
+              <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-2">
+                <FileText className="h-4 w-4 text-[#0284C7]" />
+                <span>ডাক্তার পরিচিতি ও বিশেষ অভিজ্ঞতা</span>
+              </h3>
+              <p className="text-xs text-slate-600 leading-relaxed font-medium whitespace-pre-line bg-slate-50/70 p-3.5 rounded-lg border border-slate-200/60">
+                {doctor.about}
+              </p>
+            </div>
+          )}
 
           {/* Chamber & Location Breakdown (Room, Floor, Building) */}
           <div className="rounded-xl border border-slate-200 bg-white p-5 space-y-4 shadow-xs">

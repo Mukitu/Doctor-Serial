@@ -163,13 +163,11 @@ export default function Hero({
             ✦ ১০০% ভেরিফাইড বিএমডিসি রেজিঃপ্রাপ্ত ডাক্তার
           </span>
           <h1 className="mt-4 text-3xl font-extrabold tracking-tight text-slate-900 sm:text-4xl lg:text-5xl">
-            সহজে খুঁজুন ডাক্তার, <br />
-            <span className="text-[#0284C7] font-black">
-              নিশ্চিত করুন সিরিয়াল মুহূর্তেই
-            </span>
+            <span className="text-sky-600 font-black">MyDocBD</span>-তে স্বাগতম — <br />
+            <span className="text-teal-600 font-extrabold">বিশেষজ্ঞ চিকিৎসকদের নির্ভরযোগ্য ডিজিটাল ডিরেক্টরি</span>
           </h1>
-          <p className="mx-auto mt-4 max-w-2xl text-xs md:text-sm text-slate-500 font-medium leading-relaxed">
-            {selectedDistrict ? `${selectedDistrict} জেলা ও আশপাশের` : 'সকল জেলার'} স্বনামধন্য ডাক্তারদের চেম্বার শিডিউল এবং সরাসরি সিরিয়াল বুকিংয়ের আধুনিক প্ল্যাটফর্ম। ঘরে বসেই কয়েক ক্লিকে আপনার ট্র্যাকিং নম্বর সংগ্রহ করুন।
+          <p className="mx-auto mt-4 max-w-2xl text-xs md:text-sm text-slate-600 font-medium leading-relaxed">
+            পছন্দের ডাক্তার খুঁজুন এবং MyDocBD-এর মাধ্যমে সহজেই চেম্বার সিরিয়াল নিশ্চিত করুন।
           </p>
         </div>
 

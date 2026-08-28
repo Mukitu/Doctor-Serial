@@ -202,7 +202,7 @@ export default function AppointmentTracker({ appointments }: AppointmentTrackerP
           সিরিয়াল ট্র্যাকিং ও ইতিহাস
         </h1>
         <p className="text-slate-500 font-bold text-xs mt-2 max-w-lg mx-auto leading-relaxed">
-          আপনার <span className="text-[#0284C7]">১১ ডিজিটের মোবাইল নম্বর</span> দিয়ে রাজশাহী অঞ্চলের সকল ডাক্তারের চেম্বার সিরিয়ালের বর্তমান অবস্থা এবং পূর্ববর্তী ইতিহাস দেখুন।
+          আপনার <span className="text-[#0284C7]">১১ ডিজিটের মোবাইল নম্বর</span> দিয়ে প্ল্যাটফর্মের সকল ডাক্তারের চেম্বার সিরিয়ালের বর্তমান অবস্থা এবং পূর্ববর্তী ইতিহাস দেখুন।
         </p>
       </div>
 

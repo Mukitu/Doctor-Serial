@@ -3,9 +3,17 @@ import Header from './components/Header';
 import Hero from './components/Hero';
 import DoctorDirectory from './components/DoctorDirectory';
 import BookingModal from './components/BookingModal';
+import DoctorProfileModal from './components/DoctorProfileModal';
 import AppointmentTracker from './components/AppointmentTracker';
 import AdminDashboard from './components/AdminDashboard';
 import PortalLogin from './components/PortalLogin';
+import AboutUs from './components/AboutUs';
+import TermsOfService from './components/TermsOfService';
+import PrivacyPolicy from './components/PrivacyPolicy';
+import FAQ from './components/FAQ';
+import BlogView from './components/BlogView';
+import PromoBannerComponent from './components/PromoBanner';
+import Footer from './components/Footer';
 import { Doctor, Appointment, ActiveTab, District, Specialty, Facility, AdminProfile } from './types';
 import { filterDoctorsList } from './utils/filterDoctors';
 import { HeartPulse, ShieldCheck, PhoneCall, HelpCircle, ChevronRight, Filter, X, Sparkles } from 'lucide-react';
@@ -40,6 +48,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('home');
   const [selectedDistrict, setSelectedDistrict] = useState('সকল জেলা');
   const [bookingDoctor, setBookingDoctor] = useState<Doctor | null>(null);
+  const [viewingDoctor, setViewingDoctor] = useState<Doctor | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [currentAdmin, setCurrentAdmin] = useState<AdminProfile | null>(null);
 
@@ -61,10 +70,15 @@ export default function App() {
     facility: '',
   });
 
+  // Public-facing doctors (only active doctors)
+  const publicDoctors = useMemo(() => {
+    return doctors.filter(d => d.isActive !== false);
+  }, [doctors]);
+
   // Real-time reactive filtered doctors for the Home page "আমাদের সেরা বিশেষজ্ঞরা" section
   const homeFilteredDoctors = useMemo(() => {
     return filterDoctorsList(
-      doctors,
+      publicDoctors,
       {
         selectedDistrict: selectedDistrict,
         selectedSpecialty: searchFilters.specialty,
@@ -73,7 +87,7 @@ export default function App() {
       specialties,
       districts
     ).sort((a, b) => (a.priorityIndex || 0) - (b.priorityIndex || 0));
-  }, [doctors, selectedDistrict, searchFilters.specialty, searchFilters.facility, specialties, districts]);
+  }, [publicDoctors, selectedDistrict, searchFilters.specialty, searchFilters.facility, specialties, districts]);
 
   // Unified data-loading sequence that forces a re-render once all tables have successfully populated
   useEffect(() => {
@@ -128,50 +142,58 @@ export default function App() {
     loadSession();
   }, []);
 
-  // Sync URL route states for /portal-login and /admin with safe hash-based routing fallback
+  // Sync URL route states with clean pathname-based routing (/, /doctors, /track, /about, /mydocbdadmin)
   useEffect(() => {
     const handleLocationChange = () => {
       const path = window.location.pathname;
-      const hash = window.location.hash;
       
-      if (path === '/portal-login' || path.endsWith('/portal-login') || hash === '#/portal-login' || hash === '#portal-login') {
-        setActiveTab('portal-login');
-        if (!hash) {
-          window.history.replaceState({}, '', '/#/portal-login');
-        }
-      } else if (path === '/admin' || path.endsWith('/admin') || hash === '#/admin' || hash === '#admin') {
+      if (path === '/mydocbdadmin' || path.endsWith('/mydocbdadmin')) {
         if (currentAdmin) {
           setActiveTab('admin');
-          if (!hash) {
-            window.history.replaceState({}, '', '/#/admin');
-          }
         } else {
           setActiveTab('portal-login');
-          window.history.replaceState({}, '', '/#/portal-login');
         }
-      } else if (hash === '#/doctors' || hash === '#doctors') {
+      } else if (path === '/doctors' || path.endsWith('/doctors')) {
         setActiveTab('doctors');
-      } else if (hash === '#/track' || hash === '#track') {
+      } else if (path === '/track' || path.endsWith('/track')) {
         setActiveTab('track');
-      } else if (hash === '#/' || hash === '#home' || hash === '#/home' || (!hash && path === '/')) {
+      } else if (path === '/about' || path.endsWith('/about')) {
+        setActiveTab('about');
+      } else if (path === '/terms' || path.endsWith('/terms')) {
+        setActiveTab('terms');
+      } else if (path === '/privacy' || path.endsWith('/privacy')) {
+        setActiveTab('privacy');
+      } else if (path === '/faq' || path.endsWith('/faq')) {
+        setActiveTab('faq');
+      } else if (path === '/blog' || path.endsWith('/blog')) {
+        setActiveTab('blog');
+      } else if (path === '/' || path === '' || path.endsWith('/')) {
+        setActiveTab('home');
+      } else {
+        // Fallback for unknown paths
         setActiveTab('home');
       }
     };
 
     handleLocationChange();
     window.addEventListener('popstate', handleLocationChange);
-    window.addEventListener('hashchange', handleLocationChange);
     return () => {
       window.removeEventListener('popstate', handleLocationChange);
-      window.removeEventListener('hashchange', handleLocationChange);
     };
   }, [currentAdmin]);
 
   // Client-side route protection guard
   useEffect(() => {
-    if (activeTab === 'admin' && !currentAdmin) {
-      setActiveTab('portal-login');
-      window.history.pushState({}, '', '/#/portal-login');
+    const path = window.location.pathname;
+    if (path === '/mydocbdadmin' || path.endsWith('/mydocbdadmin')) {
+      if (activeTab === 'admin' && !currentAdmin) {
+        setActiveTab('portal-login');
+      }
+    } else {
+      if (activeTab === 'admin' && !currentAdmin) {
+        setActiveTab('portal-login');
+        window.history.pushState({}, '', '/mydocbdadmin');
+      }
     }
   }, [activeTab, currentAdmin]);
 
@@ -183,6 +205,11 @@ export default function App() {
     }));
   }, [selectedDistrict]);
 
+  // Scroll to top on tab changes
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [activeTab]);
+
   // Reset synced search filters
   const resetSearchFilters = () => {
     setSearchFilters({
@@ -193,16 +220,27 @@ export default function App() {
   };
 
   const handleTabChange = (tab: ActiveTab) => {
-    if (tab === 'portal-login') {
-      window.history.pushState({}, '', '/#/portal-login');
-    } else if (tab === 'admin') {
-      window.history.pushState({}, '', '/#/admin');
+    let path = '/';
+    if (tab === 'portal-login' || tab === 'admin') {
+      path = '/mydocbdadmin';
     } else if (tab === 'doctors') {
-      window.history.pushState({}, '', '/#/doctors');
+      path = '/doctors';
     } else if (tab === 'track') {
-      window.history.pushState({}, '', '/#/track');
-    } else {
-      window.history.pushState({}, '', '/#/');
+      path = '/track';
+    } else if (tab === 'about') {
+      path = '/about';
+    } else if (tab === 'terms') {
+      path = '/terms';
+    } else if (tab === 'privacy') {
+      path = '/privacy';
+    } else if (tab === 'faq') {
+      path = '/faq';
+    } else if (tab === 'blog') {
+      path = '/blog';
+    }
+
+    if (window.location.pathname !== path) {
+      window.history.pushState({}, '', path);
     }
     setActiveTab(tab);
   };
@@ -215,7 +253,7 @@ export default function App() {
     }
     setCurrentAdmin(null);
     setActiveTab('home');
-    window.history.pushState({}, '', '/#/');
+    window.history.pushState({}, '', '/');
   };
 
   // State mutation actions linked directly to the dynamic service layer
@@ -442,6 +480,9 @@ export default function App() {
               facilities={facilities}
             />
 
+            {/* Hero Slot Promo Banner */}
+            <PromoBannerComponent slot="hero" className="my-8 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8" />
+
             {/* Curated Top-Priority Doctors Highlight Grid with Instant Reactive Filtering */}
             <section id="featured-doctors-section" className="py-12 bg-white border-t border-b border-slate-200 scroll-mt-6">
               <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
@@ -558,78 +599,71 @@ export default function App() {
                     {homeFilteredDoctors.map((doc) => (
                       <div
                         key={doc.id}
-                        className="rounded-lg border border-slate-200 p-5 hover:border-[#0284C7] transition bg-white flex flex-col justify-between"
+                        onClick={() => setViewingDoctor(doc)}
+                        className="group rounded-xl border border-slate-200 p-5 hover:border-[#0284C7] hover:shadow-md transition bg-white flex flex-col justify-between cursor-pointer"
+                        id={`home-doctor-card-${doc.id}`}
                       >
                         <div>
                           <div className="flex items-start justify-between gap-3">
-                            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-700 font-extrabold border border-slate-200 text-xs">
-                              {doc.name.split(' ').filter(n => !n.includes('ডা.') && !n.includes(' can')).map(n => n[0]).slice(0, 2).join('') || 'DR'}
+                            <div className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-800 font-extrabold border border-slate-200 text-xs overflow-hidden">
+                              {doc.photoUrl ? (
+                                <img
+                                  src={doc.photoUrl}
+                                  alt={doc.name}
+                                  className="h-full w-full object-cover"
+                                  referrerPolicy="no-referrer"
+                                  onError={(e) => {
+                                    (e.target as HTMLImageElement).style.display = 'none';
+                                  }}
+                                />
+                              ) : (
+                                <span>{doc.name.split(' ').filter(n => !n.includes('ডা.') && !n.includes(' can')).map(n => n[0]).slice(0, 2).join('') || 'DR'}</span>
+                              )}
+                              <div className="absolute -bottom-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-[#0284C7] text-white">
+                                <ShieldCheck className="h-3 w-3" />
+                              </div>
                             </div>
                             <span className="inline-flex rounded-md bg-slate-100 px-2 py-0.5 text-[9px] font-bold text-slate-600 border border-slate-200/50">
                               {doc.specialty}
                             </span>
                           </div>
 
-                          <h3 className="font-bold text-slate-800 text-sm sm:text-base mt-3 flex items-center gap-1">
+                          <h3 className="font-bold text-slate-800 text-sm sm:text-base mt-3 flex items-center gap-1 group-hover:text-[#0284C7] transition">
                             {doc.name}
                           </h3>
                           <p className="text-[11px] font-bold text-slate-400 mt-0.5 line-clamp-1">{doc.degrees}</p>
-                          <p className="text-[11px] font-bold text-slate-500 mt-1">{doc.workplace}</p>
+                          <p className="text-[11px] font-bold text-[#0D9488] mt-0.5">{doc.designation}</p>
+                          <p className="text-[11px] font-bold text-slate-500 mt-0.5 line-clamp-1">{doc.workplace}</p>
 
                           <div className="mt-4 rounded-lg bg-slate-50 p-2.5 border border-slate-200 text-[11px] text-slate-500 space-y-1 font-bold">
                             <p>🕒 সময়: <b className="text-slate-700">{doc.visitingTime || 'বিকাল ৫:০০ - রাত ৮:৩০'}</b></p>
                             <p>🏥 চেম্বার: <b className="text-slate-700 line-clamp-1">{doc.facility ? doc.facility.replace(', রাজশাহী', '') : 'পপুলার ডায়াগনস্টিক সেন্টার'}</b></p>
+                            {doc.chamberRoomNo && (
+                              <p className="text-[#0284C7]">🚪 রুম: <b className="text-[#0284C7]">{doc.chamberRoomNo}</b> | ফ্লোর: <b className="text-slate-700">{doc.chamberFloor || 'নিচতলা'}</b></p>
+                            )}
                           </div>
                         </div>
 
-                        <button
-                          onClick={() => setBookingDoctor(doc)}
-                          className="mt-4 w-full rounded-lg bg-[#0284C7] hover:bg-[#0274af] py-2 text-center text-xs font-bold text-white transition cursor-pointer"
-                        >
-                          সিরিয়াল বুক করুন
-                        </button>
+                        <div className="mt-4 grid grid-cols-2 gap-2" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            type="button"
+                            onClick={() => setViewingDoctor(doc)}
+                            className="w-full rounded-lg bg-slate-100 hover:bg-slate-200 py-2 text-center text-xs font-bold text-slate-700 transition cursor-pointer border border-slate-200/60"
+                          >
+                            প্রোফাইল দেখুন
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setBookingDoctor(doc)}
+                            className="w-full rounded-lg bg-[#0284C7] hover:bg-[#0274af] py-2 text-center text-xs font-bold text-white transition cursor-pointer shadow-xs"
+                          >
+                            সিরিয়াল নিন
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
                 )}
-              </div>
-            </section>
-
-            {/* Patients FAQs & Advisory Info */}
-            <section className="py-12 md:py-14">
-              <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
-                <div className="text-center mb-10">
-                  <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 border border-slate-200 text-[#0284C7] mb-2">
-                    <HelpCircle className="h-4.5 w-4.5" />
-                  </span>
-                  <h2 className="text-lg font-bold text-slate-800 md:text-xl">
-                    সচরাচর জিজ্ঞাসিত প্রশ্নাবলী (FAQ)
-                  </h2>
-                  <p className="text-xs text-slate-400 font-bold mt-1">
-                    রোগী বুকিং ও ট্র্যাকিং সেবার বিষয়ে প্রয়োজনীয় তথ্য
-                  </p>
-                </div>
-
-                <div className="space-y-4">
-                  <div className="rounded-lg border border-slate-200 bg-white p-5">
-                    <h3 className="font-bold text-slate-800 text-sm">১. বিএমডিসি ভেরিফাইড (BM&DC Verified) মানে কী?</h3>
-                    <p className="mt-2 text-xs text-slate-400 leading-relaxed font-semibold">
-                      বাংলাদেশ মেডিকেল অ্যান্ড ডেন্টাল কাউন্সিল (BM&DC) দ্বারা নিবন্ধিত এবং লাইসেন্সকৃত ডাক্তারদের তালিকা এখানে নিশ্চিত করা হয়। আমাদের সকল ডাক্তারের BM&DC রেজিস্ট্রেশন নম্বর ভেরিফাইড ও সত্য।
-                    </p>
-                  </div>
-                  <div className="rounded-lg border border-slate-200 bg-white p-5">
-                    <h3 className="font-bold text-slate-800 text-sm">২. সিরিয়াল রিকোয়েস্ট পেন্ডিং স্ট্যাটাসটি কখন কনফার্ম হবে?</h3>
-                    <p className="mt-2 text-xs text-slate-400 leading-relaxed font-semibold">
-                      সিরিয়াল বুকিংয়ের পর আমাদের সংশ্লিষ্ট হাসপাতালের চেম্বার সহকারীরা আপনার কাঙ্ক্ষিত শিডিউল এবং ডাক্তারদের উপস্থিতির সাপেক্ষে সাধারণত ২০-৩০ মিনিটের মাঝে রিকোয়েস্টটি যাচাই করে "Pending" থেকে "Confirmed" করবেন।
-                    </p>
-                  </div>
-                  <div className="rounded-lg border border-slate-200 bg-white p-5">
-                    <h3 className="font-bold text-slate-800 text-sm">৩. সিরিয়াল কনফার্মেশন ও রোগী দেখার ক্রমানুসার কীভাবে নির্ধারিত হয়?</h3>
-                    <p className="mt-2 text-xs text-slate-400 leading-relaxed font-semibold">
-                      চূড়ান্ত কনফার্মেশন নিশ্চিত হলে আপনি ট্র্যাকিং স্ক্রিনে আপনার স্ট্যাটাস কনফার্ম দেখতে পাবেন। রোগী দেখার সিরিয়ালের ক্রম সাধারণত আগে আসলে আগে পাবেন বা চেম্বারে উপস্থিতির ক্রমের উপর ভিত্তি করে সহকারী দ্বারা নিয়ন্ত্রিত হয়।
-                    </p>
-                  </div>
-                </div>
               </div>
             </section>
           </div>
@@ -637,7 +671,7 @@ export default function App() {
 
         {activeTab === 'doctors' && (
           <DoctorDirectory
-            doctors={doctors}
+            doctors={publicDoctors}
             specialties={specialties}
             facilities={facilities}
             districts={districts}
@@ -651,6 +685,26 @@ export default function App() {
 
         {activeTab === 'track' && (
           <AppointmentTracker appointments={appointments} />
+        )}
+
+        {activeTab === 'about' && (
+          <AboutUs onBackToHome={() => handleTabChange('home')} />
+        )}
+
+        {activeTab === 'terms' && (
+          <TermsOfService onBackToHome={() => handleTabChange('home')} />
+        )}
+
+        {activeTab === 'privacy' && (
+          <PrivacyPolicy onBackToHome={() => handleTabChange('home')} />
+        )}
+
+        {activeTab === 'faq' && (
+          <FAQ onBackToHome={() => handleTabChange('home')} />
+        )}
+
+        {activeTab === 'blog' && (
+          <BlogView onBackToHome={() => handleTabChange('home')} />
         )}
 
         {activeTab === 'portal-login' && (
@@ -697,73 +751,24 @@ export default function App() {
         />
       )}
 
+      {/* Doctor Profile and Reviews Modal */}
+      {viewingDoctor && (
+        <DoctorProfileModal
+          doctor={viewingDoctor}
+          isOpen={!!viewingDoctor}
+          onClose={() => setViewingDoctor(null)}
+          onBookNow={(doc) => {
+            setViewingDoctor(null);
+            setBookingDoctor(doc);
+          }}
+        />
+      )}
+
+      {/* Dynamic Footer Slot Banner */}
+      <PromoBannerComponent slot="footer" className="my-8 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8" />
+
       {/* Sophisticated Footer with Accent colors */}
-      <footer className="bg-slate-900 text-slate-400 border-t border-slate-800 py-10">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="grid gap-8 md:grid-cols-4">
-            {/* Logo and Brand Info */}
-            <div className="md:col-span-1 space-y-3">
-              <div className="flex items-center gap-2">
-                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#0284C7] text-white">
-                  <HeartPulse className="h-5 w-5" />
-                </div>
-                <span className="text-lg font-black text-white">সেবাসিরিয়াল</span>
-              </div>
-              <p className="text-xs text-slate-400 leading-relaxed font-semibold">
-                ডাক্তার সিরিয়াল এবং কনফার্মেশন সহজীকরণে উত্তরবঙ্গের আধুনিক ডিজিটাল সেবা পোর্টাল।
-              </p>
-              <div className="flex items-center gap-1.5 text-[#2563EB] text-[10px] font-bold">
-                <ShieldCheck className="h-4 w-4" />
-                <span>১০০% বিএমডিসি ভেরিফাইড নেটওয়ার্ক</span>
-              </div>
-            </div>
-
-            {/* Quick Links */}
-            <div>
-              <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider mb-3">নেভিগেশন</h4>
-              <ul className="space-y-2 text-xs font-semibold">
-                <li>
-                  <button onClick={() => handleTabChange('home')} className="hover:text-[#0284C7] transition cursor-pointer">হোম পেজ</button>
-                </li>
-                <li>
-                  <button onClick={() => handleTabChange('doctors')} className="hover:text-[#0284C7] transition cursor-pointer">ডাক্তার তালিকা</button>
-                </li>
-                <li>
-                  <button onClick={() => handleTabChange('track')} className="hover:text-[#0284C7] transition cursor-pointer">সিরিয়াল ট্র্যাকার</button>
-                </li>
-              </ul>
-            </div>
-
-            {/* Selected District Details */}
-            <div>
-              <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider mb-3">সার্ভিস এরিয়া</h4>
-              <p className="text-xs leading-relaxed font-semibold">
-                বর্তমানে আমাদের প্ল্যাটফর্মটি মূলত <b>রাজশাহী বিভাগ ও এর পার্শ্ববর্তী জেলাসমূহের</b> চিকিৎসকদের চেম্বার সিডিউল সেবা প্রদান করছে।
-              </p>
-            </div>
-
-            {/* Emergency Hotline Contact block */}
-            <div className="rounded-lg bg-slate-800/30 p-4 border border-slate-800 space-y-2">
-              <span className="text-[10px] font-bold uppercase text-slate-400">সহায়তার জন্য হটলাইন</span>
-              <div className="flex items-center gap-2 text-white">
-                <PhoneCall className="h-4 w-4 text-[#0D9488]" />
-                <span className="font-mono text-base font-black">০৯৬১২-৩৪৫৬৭৮</span>
-              </div>
-              <p className="text-[10px] text-slate-400 font-semibold leading-relaxed">
-                সকাল ৮:০০ টা থেকে রাত ১০:০০ টা পর্যন্ত আমাদের সাপোর্ট টিম আপনার যেকোনো প্রশ্নের উত্তর দিতে প্রস্তুত।
-              </p>
-            </div>
-          </div>
-
-          <div className="mt-8 border-t border-slate-800 pt-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-[10px] font-semibold text-slate-500">
-            <p>© ২০২৬ সেবাসিরিয়াল (Sheba Serial) পোর্টাল। সর্বস্বত্ব সংরক্ষিত।</p>
-            <div className="flex gap-4">
-              <a href="#" className="hover:underline">ব্যবহারের নিয়মাবলী</a>
-              <a href="#" className="hover:underline">প্রাইভেসি পলিসি</a>
-            </div>
-          </div>
-        </div>
-      </footer>
+      <Footer activeTab={activeTab} setActiveTab={handleTabChange} />
     </div>
   );
 }

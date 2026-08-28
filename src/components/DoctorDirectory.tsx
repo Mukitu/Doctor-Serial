@@ -18,6 +18,7 @@ import {
 import { Doctor, Specialty, Facility, District } from '../types';
 import { filterDoctorsList } from '../utils/filterDoctors';
 import DoctorProfileModal from './DoctorProfileModal';
+import PromoBannerComponent from './PromoBanner';
 
 interface DoctorDirectoryProps {
   doctors: Doctor[];
@@ -257,6 +258,9 @@ export default function DoctorDirectory({
                 })}
               </div>
             </div>
+            
+            {/* Sidebar Promo Banner Slot */}
+            <PromoBannerComponent slot="sidebar" className="mt-4 shadow-xs" />
           </div>
         </aside>
 
@@ -379,15 +383,31 @@ export default function DoctorDirectory({
                 return (
                   <div
                     key={doc.id}
-                    className="group flex flex-col justify-between rounded-xl border border-slate-200 bg-white p-5 transition hover:border-[#0284C7] shadow-sm"
+                    onClick={() => setSelectedDoctorForModal(doc)}
+                    className="group flex flex-col justify-between rounded-xl border border-slate-200 bg-white p-5 transition hover:border-[#0284C7] hover:shadow-md shadow-sm cursor-pointer"
                     id={`doctor-card-${doc.id}`}
                   >
                     <div>
                       {/* Header: Photo and Verification */}
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex items-center gap-3">
-                          <div className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-slate-50 text-slate-800 font-black text-xs border border-slate-200">
-                            {doc.name.split(' ').filter(n => !n.includes('ডা.') && !n.includes(' can')).map(n => n[0]).slice(0, 2).join('') || 'DR'}
+                          <div 
+                            onClick={() => setSelectedDoctorForModal(doc)}
+                            className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-slate-50 text-slate-800 font-black text-xs border border-slate-200 overflow-hidden cursor-pointer hover:opacity-90 transition"
+                          >
+                            {doc.photoUrl ? (
+                              <img
+                                src={doc.photoUrl}
+                                alt={doc.name}
+                                className="h-full w-full object-cover"
+                                referrerPolicy="no-referrer"
+                                onError={(e) => {
+                                  (e.target as HTMLImageElement).style.display = 'none';
+                                }}
+                              />
+                            ) : (
+                              <span>{doc.name.split(' ').filter(n => !n.includes('ডা.') && !n.includes(' can')).map(n => n[0]).slice(0, 2).join('') || 'DR'}</span>
+                            )}
                             <div className="absolute -bottom-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-[#2563EB] text-white">
                               <ShieldCheck className="h-3 w-3" />
                             </div>
@@ -467,7 +487,7 @@ export default function DoctorDirectory({
                     </div>
 
                     {/* Action Buttons: Details/Reviews + Booking Trigger */}
-                    <div className="mt-5 pt-2 grid grid-cols-2 gap-2">
+                    <div className="mt-5 pt-2 grid grid-cols-2 gap-2" onClick={(e) => e.stopPropagation()}>
                       <button
                         type="button"
                         onClick={() => setSelectedDoctorForModal(doc)}

@@ -1,6 +1,6 @@
 {
-  "name": "Doctor Serial Tracker",
-  "description": "A responsive healthcare appointment and doctor serial tracking portal with admin and user interfaces.",
+  "name": "MyDocBD",
+  "description": "MyDocBD (মাই ডক বিডি) - দেশসেরা বিশেষজ্ঞ ডাক্তারদের বিস্তারিত সময়সূচি, ভিজিট ফি এবং ঘরে বসেই অত্যন্ত সহজে চেম্বার সিরিয়াল নিশ্চিতকরণ প্ল্যাটফর্ম।",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

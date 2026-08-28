@@ -41,6 +41,7 @@ export interface Doctor {
   designation: string; // e.g., "সহযোগী অধ্যাপক"
   workplace: string; // e.g., "রাজশাহী মেডিকেল কলেজ ও হাসপাতাল"
   chamberAddress: string; // e.g., "পপুলার ডায়াগনস্টিক সেন্টার, রাজশাহী"
+  about?: string; // Doctor biography / profile / detailed about info
   photoUrl?: string;
   priorityIndex: number;
   isActive?: boolean;
@@ -100,7 +101,32 @@ export interface Appointment {
   updatedAt?: string;
 }
 
-export type ActiveTab = 'home' | 'doctors' | 'track' | 'admin' | 'portal-login';
+export interface BlogPost {
+  id: string;
+  title: string;
+  slug: string;
+  content: string;
+  excerpt: string;
+  coverImage: string;
+  category: string;
+  author: string;
+  isPublished: boolean;
+  views: number;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface PromoBanner {
+  id: string;
+  title: string;
+  imageUrl: string;
+  targetUrl?: string;
+  slot: 'hero' | 'directory' | 'sidebar' | 'footer';
+  isActive: boolean;
+  createdAt: string;
+}
+
+export type ActiveTab = 'home' | 'doctors' | 'track' | 'admin' | 'portal-login' | 'about' | 'terms' | 'privacy' | 'faq' | 'blog';
 
 export interface AdminProfile {
   id: string;

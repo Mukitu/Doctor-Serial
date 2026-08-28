@@ -20,9 +20,11 @@ import {
   Phone,
   Lock,
   CheckCircle2,
-  Send
+  Send,
+  BookOpen,
+  Image as ImageIcon
 } from 'lucide-react';
-import { Doctor, Appointment, Specialty, Facility, AdminProfile, District, Review } from '../types';
+import { Doctor, Appointment, Specialty, Facility, AdminProfile, District, Review, BlogPost, PromoBanner } from '../types';
 import { 
   getAdmins, 
   createAdminUser, 
@@ -32,7 +34,16 @@ import {
   addReview,
   approveReview,
   deleteReview,
-  confirmAppointment
+  confirmAppointment,
+  getBlogs,
+  addBlog,
+  updateBlog,
+  deleteBlog,
+  getPromoBanners,
+  addPromoBanner,
+  updatePromoBanner,
+  deletePromoBanner,
+  updateDoctorStatus
 } from '../lib/supabase';
 
 interface AdminDashboardProps {
@@ -95,6 +106,17 @@ export default function AdminDashboard({
   const [editingDoctor, setEditingDoctor] = useState<Doctor | null>(null);
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+  const [toastMsg, setToastMsg] = useState('');
+
+  // Auto-hide toast after 3 seconds
+  useEffect(() => {
+    if (toastMsg) {
+      const timer = setTimeout(() => {
+        setToastMsg('');
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [toastMsg]);
 
   // Reviews Management States
   const [reviewsList, setReviewsList] = useState<Review[]>([]);
@@ -154,6 +176,60 @@ export default function AdminDashboard({
   const [specialtyIconName, setSpecialtyIconName] = useState('Heart');
   const [specialtyOrder, setSpecialtyOrder] = useState('0');
   const [specialtyActive, setSpecialtyActive] = useState(true);
+
+  // Blogs CRUD States
+  const [blogsList, setBlogsList] = useState<BlogPost[]>([]);
+  const [blogsLoading, setBlogsLoading] = useState(false);
+  const [showBlogModal, setShowBlogModal] = useState(false);
+  const [editingBlog, setEditingBlog] = useState<BlogPost | null>(null);
+  const [blogTitle, setBlogTitle] = useState('');
+  const [blogSlug, setBlogSlug] = useState('');
+  const [blogExcerpt, setBlogExcerpt] = useState('');
+  const [blogContent, setBlogContent] = useState('');
+  const [blogCoverImage, setBlogCoverImage] = useState('');
+  const [blogCategory, setBlogCategory] = useState('');
+  const [blogAuthor, setBlogAuthor] = useState('MyDocBD মেডিকেল টিম');
+  const [blogIsPublished, setBlogIsPublished] = useState(true);
+
+  // Banners CRUD States
+  const [bannersList, setBannersList] = useState<PromoBanner[]>([]);
+  const [bannersLoading, setBannersLoading] = useState(false);
+  const [showBannerModal, setShowBannerModal] = useState(false);
+  const [editingBanner, setEditingBanner] = useState<PromoBanner | null>(null);
+  const [bannerTitle, setBannerTitle] = useState('');
+  const [bannerImageUrl, setBannerImageUrl] = useState('');
+  const [bannerTargetUrl, setBannerTargetUrl] = useState('');
+  const [bannerSlot, setBannerSlot] = useState<'hero' | 'directory' | 'sidebar' | 'footer'>('hero');
+  const [bannerIsActive, setBannerIsActive] = useState(true);
+
+  const loadBlogsList = async () => {
+    setBlogsLoading(true);
+    try {
+      const data = await getBlogs();
+      setBlogsList(data);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setBlogsLoading(false);
+    }
+  };
+
+  const loadBannersList = async () => {
+    setBannersLoading(true);
+    try {
+      const data = await getPromoBanners();
+      setBannersList(data);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setBannersLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadBlogsList();
+    loadBannersList();
+  }, []);
 
   // Set default district id on first load
   useEffect(() => {
@@ -406,6 +482,123 @@ export default function AdminDashboard({
     }
   };
 
+  // Blog management actions
+  const handleBlogSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!blogTitle.trim() || !blogContent.trim() || !blogSlug.trim()) {
+      alert('সবগুলো ফিল্ড সঠিকভাবে পূরণ করুন।');
+      return;
+    }
+    try {
+      if (editingBlog) {
+        await updateBlog({
+          ...editingBlog,
+          title: blogTitle.trim(),
+          slug: blogSlug.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-'),
+          excerpt: blogExcerpt.trim() || blogContent.trim().substring(0, 150),
+          content: blogContent.trim(),
+          coverImage: blogCoverImage.trim() || 'https://images.unsplash.com/photo-1505751172876-fa1923c5c528?auto=format&fit=crop&q=80&w=1000',
+          category: blogCategory || 'স্বাস্থ্য সচেতনতা',
+          author: blogAuthor.trim() || 'MyDocBD টিম',
+          isPublished: blogIsPublished,
+          views: editingBlog.views || 0,
+          createdAt: editingBlog.createdAt
+        });
+        setToastMsg('ব্লগ সফলভাবে আপডেট করা হয়েছে!');
+      } else {
+        await addBlog({
+          title: blogTitle.trim(),
+          slug: blogSlug.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-'),
+          excerpt: blogExcerpt.trim() || blogContent.trim().substring(0, 150),
+          content: blogContent.trim(),
+          coverImage: blogCoverImage.trim() || 'https://images.unsplash.com/photo-1505751172876-fa1923c5c528?auto=format&fit=crop&q=80&w=1000',
+          category: blogCategory || 'স্বাস্থ্য সচেতনতা',
+          author: blogAuthor.trim() || 'MyDocBD টিম',
+          isPublished: blogIsPublished
+        });
+        setToastMsg('নতুন ব্লগ সফলভাবে প্রকাশ করা হয়েছে!');
+      }
+      setShowBlogModal(false);
+      setEditingBlog(null);
+      setBlogTitle('');
+      setBlogSlug('');
+      setBlogExcerpt('');
+      setBlogContent('');
+      setBlogCoverImage('');
+      setBlogCategory('');
+      setBlogAuthor('MyDocBD মেডিকেল টিম');
+      setBlogIsPublished(true);
+      await loadBlogsList();
+    } catch (err: any) {
+      alert(err.message || 'সংরক্ষণ ব্যর্থ হয়েছে।');
+    }
+  };
+
+  const handleBlogDelete = async (id: string, title: string) => {
+    if (confirm(`আপনি কি নিশ্চিতভাবে এই ব্লগটি ডিলিট করতে চান?\n"${title}"`)) {
+      try {
+        await deleteBlog(id);
+        setToastMsg('ব্লগ ডিলিট করা হয়েছে!');
+        await loadBlogsList();
+      } catch (err) {
+        alert('ডিলিট করতে ব্যর্থ হয়েছে।');
+      }
+    }
+  };
+
+  // Banner management actions
+  const handleBannerSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!bannerTitle.trim() || !bannerImageUrl.trim()) {
+      alert('সবগুলো ফিল্ড সঠিকভাবে পূরণ করুন।');
+      return;
+    }
+    try {
+      if (editingBanner) {
+        await updatePromoBanner({
+          ...editingBanner,
+          title: bannerTitle.trim(),
+          imageUrl: bannerImageUrl.trim(),
+          targetUrl: bannerTargetUrl.trim(),
+          slot: bannerSlot,
+          isActive: bannerIsActive
+        });
+        setToastMsg('ব্যানার সফলভাবে আপডেট করা হয়েছে!');
+      } else {
+        await addPromoBanner({
+          title: bannerTitle.trim(),
+          imageUrl: bannerImageUrl.trim(),
+          targetUrl: bannerTargetUrl.trim(),
+          slot: bannerSlot,
+          isActive: bannerIsActive
+        });
+        setToastMsg('নতুন ব্যানার সফলভাবে তৈরি করা হয়েছে!');
+      }
+      setShowBannerModal(false);
+      setEditingBanner(null);
+      setBannerTitle('');
+      setBannerImageUrl('');
+      setBannerTargetUrl('');
+      setBannerSlot('hero');
+      setBannerIsActive(true);
+      await loadBannersList();
+    } catch (err: any) {
+      alert(err.message || 'সংরক্ষণ ব্যর্থ হয়েছে।');
+    }
+  };
+
+  const handleBannerDelete = async (id: string, title: string) => {
+    if (confirm(`আপনি কি নিশ্চিতভাবে এই ব্যানারটি ডিলিট করতে চান?\n"${title}"`)) {
+      try {
+        await deletePromoBanner(id);
+        setToastMsg('ব্যানার ডিলিট করা হয়েছে!');
+        await loadBannersList();
+      } catch (err) {
+        alert('ডিলিট করতে ব্যর্থ হয়েছে।');
+      }
+    }
+  };
+
   // Doctor Form States
   const [docName, setDocName] = useState('');
   const [docBmdc, setDocBmdc] = useState('');
@@ -427,6 +620,7 @@ export default function AdminDashboard({
   const [docRating, setDocRating] = useState('5.0');
   const [docReviewCount, setDocReviewCount] = useState('0');
   const [docPhotoUrl, setDocPhotoUrl] = useState('');
+  const [docAbout, setDocAbout] = useState('');
 
   const DAYS_LIST = ['শনিবার', 'রবিবার', 'সোমবার', 'মঙ্গলবার', 'বুধবার', 'বৃহস্পতিবার', 'শুক্রবার'];
 
@@ -502,8 +696,19 @@ export default function AdminDashboard({
   const handleOpenConfirmModal = (app: Appointment) => {
     setConfirmingApp(app);
     // Find doctor info to prepopulate chamber details if not already set
-    const matchedDoc = doctors.find(d => d.id === app.doctorId || d.name === app.doctorName);
-    const existingCount = appointments.filter(a => a.doctorId === app.doctorId && a.preferredDate === app.preferredDate && a.status === 'Confirmed').length;
+    const matchedDoc = doctors.find(d => 
+      d.id === app.doctorId || 
+      d.name === app.doctorName || 
+      (d.id.includes('::') && app.doctorId?.includes('::') && d.id.split('::')[0] === app.doctorId.split('::')[0]) ||
+      (d.id.includes('::') && d.id.split('::')[0] === app.doctorId) ||
+      (app.doctorId?.includes('::') && d.id === app.doctorId.split('::')[0])
+    );
+    const existingCount = appointments.filter(a => 
+      (a.doctorId === app.doctorId || 
+       (a.doctorId?.includes('::') && app.doctorId?.includes('::') && a.doctorId.split('::')[0] === app.doctorId.split('::')[0])) && 
+      a.preferredDate === app.preferredDate && 
+      a.status === 'Confirmed'
+    ).length;
     const nextSerial = String(existingCount + 1).padStart(2, '0');
 
     setConfSerialNo(app.serialNo !== undefined && app.serialNo !== '' ? app.serialNo : nextSerial);
@@ -541,6 +746,23 @@ export default function AdminDashboard({
     }
   };
 
+  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 2 * 1024 * 1024) {
+        alert('ছবিটি অনেক বড় (সর্বোচ্চ ২ এমবি প্রযোজ্য)');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        if (typeof reader.result === 'string') {
+          setDocPhotoUrl(reader.result);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   const handleDayCheckbox = (day: string) => {
     setDocVisitingDays((prev) =>
       prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]
@@ -569,6 +791,7 @@ export default function AdminDashboard({
     setDocRating((doc.rating || 5.0).toString());
     setDocReviewCount((doc.reviewCount || 0).toString());
     setDocPhotoUrl(doc.photoUrl || '');
+    setDocAbout(doc.about || '');
     
     // Auto scroll to form
     const formElement = document.getElementById('doctor-form-section');
@@ -603,6 +826,7 @@ export default function AdminDashboard({
     setDocRating('5.0');
     setDocReviewCount('0');
     setDocPhotoUrl('');
+    setDocAbout('');
     setError('');
   };
 
@@ -667,6 +891,7 @@ export default function AdminDashboard({
       rating: parseFloat(docRating) || 5.0,
       reviewCount: parseInt(docReviewCount) || 0,
       photoUrl: docPhotoUrl,
+      about: docAbout,
       specialtyId: specialtyId,
       facilityId: facilityId,
       chamberId: editingDoctor?.chamberId
@@ -691,11 +916,22 @@ export default function AdminDashboard({
       <div className="rounded-lg border border-slate-200 bg-slate-50/50 p-5 md:p-6 mb-6">
         <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <span className="inline-flex rounded-md bg-slate-100 px-2 py-0.5 text-[9px] font-bold text-slate-600 border border-slate-200">
-              ● অ্যাডমিন কন্ট্রোল প্যানেল
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="inline-flex rounded-md bg-slate-100 px-2 py-0.5 text-[9px] font-bold text-slate-600 border border-slate-200">
+                ● MyDocBD কন্ট্রোল প্যানেল
+              </span>
+              {currentAdmin && (
+                <span className={`inline-flex items-center rounded px-2 py-0.5 text-[9px] font-extrabold border ${
+                  currentAdmin.role === 'super_admin' 
+                    ? 'bg-red-50 text-red-700 border-red-200' 
+                    : 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                }`}>
+                  {currentAdmin.role === 'super_admin' ? 'সুপার অ্যাডমিন' : 'অ্যাডমিন'}
+                </span>
+              )}
+            </div>
             <h1 className="mt-2 text-xl font-bold text-slate-800 md:text-2xl">
-              সেবা-সিরিয়াল অ্যাডমিন ড্যাশবোর্ড
+              MyDocBD কন্ট্রোল প্যানেল
             </h1>
             <p className="text-slate-400 font-semibold text-xs mt-1">
               রোগীর অ্যাপয়েন্টমেন্ট অনুমোদন, নতুন চিকিৎসক সংযোজন ও বিদ্যমান চিকিৎসকদের শিডিউল ও ভিজিট ম্যানেজ করুন।
@@ -809,6 +1045,30 @@ export default function AdminDashboard({
         >
           <Award className="h-4 w-4 text-purple-600" />
           <span>স্পেশালিটি ও ক্যাটাগরি ({specialties.length})</span>
+        </button>
+        <button
+          onClick={() => setSubTab('blogs')}
+          className={`flex items-center gap-2 border-b-2 px-5 py-2.5 text-xs font-bold transition cursor-pointer ${
+            subTab === 'blogs'
+              ? 'border-[#0284C7] text-[#0284C7]'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
+          }`}
+          id="admin-subtab-blogs-btn"
+        >
+          <BookOpen className="h-4 w-4 text-sky-600" />
+          <span>স্বাস্থ্য ব্লগ ({blogsList.length})</span>
+        </button>
+        <button
+          onClick={() => setSubTab('banners')}
+          className={`flex items-center gap-2 border-b-2 px-5 py-2.5 text-xs font-bold transition cursor-pointer ${
+            subTab === 'banners'
+              ? 'border-[#0284C7] text-[#0284C7]'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
+          }`}
+          id="admin-subtab-banners-btn"
+        >
+          <ImageIcon className="h-4 w-4 text-rose-500" />
+          <span>প্রোমো ব্যানার ও বিজ্ঞাপন ({bannersList.length})</span>
         </button>
       </div>
 
@@ -1265,16 +1525,67 @@ export default function AdminDashboard({
                   </div>
                 </div>
 
-                {/* Photo URL Input */}
+                 {/* Biography / About Doctor */}
                 <div className="flex flex-col gap-1">
-                  <label className="text-[11px] font-bold text-slate-500">ডাক্তারের ছবি URL (Photo URL)</label>
-                  <input
-                    type="text"
-                    placeholder="https://example.com/photo.jpg"
-                    value={docPhotoUrl}
-                    onChange={(e) => setDocPhotoUrl(e.target.value)}
-                    className="w-full rounded-lg border border-slate-200 py-2 px-3 text-xs font-bold text-slate-800 bg-white focus:outline-none focus:border-[#0284C7]"
+                  <label className="text-[11px] font-bold text-slate-500">ডাক্তারের সংক্ষিপ্ত পরিচিতি বা জীবনবৃত্তান্ত (Biography/About)</label>
+                  <textarea
+                    rows={4}
+                    placeholder="যেমন: ডা. সাজ্জাদ হোসেন একজন প্রখ্যাত ইন্টারভেনশনাল কার্ডিওলজিস্ট। এনজিওগ্রাম, হার্ট ফেইলিউর ব্যবস্থাপনা, বুক ধড়ফড় এবং উচ্চ রক্তচাপের সঠিক ব্যবস্থাপনায় তিনি সুপরিচিত ও নির্ভরযোগ্য।"
+                    value={docAbout}
+                    onChange={(e) => setDocAbout(e.target.value)}
+                    className="w-full rounded-lg border border-slate-200 py-2 px-3 text-xs font-semibold text-slate-800 bg-white focus:outline-none focus:border-[#0284C7] leading-relaxed"
                   />
+                  <p className="text-[9px] text-slate-400 font-medium">* এই তথ্যটি চিকিৎসকের বিস্তারিত প্রোফাইল মোডালে প্রদর্শিত হবে।</p>
+                </div>
+
+                {/* Photo URL & Upload Section */}
+                <div className="flex flex-col gap-1.5 rounded-lg border border-slate-200 bg-slate-50 p-3">
+                  <label className="text-[11px] font-bold text-slate-700">ডাক্তারের প্রোফাইল ছবি (Profile Picture)</label>
+                  
+                  <div className="flex flex-col sm:flex-row gap-3 items-center">
+                    {/* Preview circle */}
+                    <div className="relative flex h-16 w-16 shrink-0 items-center justify-center rounded-xl bg-white text-slate-800 font-extrabold text-lg border border-slate-200 shadow-xs overflow-hidden">
+                      {docPhotoUrl ? (
+                        <img
+                          src={docPhotoUrl}
+                          alt="Doctor Preview"
+                          className="h-full w-full object-cover"
+                          referrerPolicy="no-referrer"
+                          onError={(e) => {
+                            // If load fails, hide image
+                            (e.target as HTMLImageElement).style.display = 'none';
+                          }}
+                        />
+                      ) : (
+                        <span className="text-slate-300 font-bold text-xs">নো ছবি</span>
+                      )}
+                    </div>
+
+                    <div className="flex-1 w-full space-y-2">
+                      {/* File upload option */}
+                      <div>
+                        <span className="text-[10px] font-bold text-slate-500 block mb-1">১. কম্পিউটার বা মোবাইল থেকে ছবি সিলেক্ট করুন (Upload File)</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handlePhotoUpload}
+                          className="w-full text-xs font-bold text-slate-700 bg-white border border-slate-200 rounded-lg file:mr-2 file:py-1 file:px-2.5 file:rounded file:border-0 file:text-[11px] file:font-bold file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200 file:cursor-pointer cursor-pointer"
+                        />
+                      </div>
+
+                      {/* URL option */}
+                      <div>
+                        <span className="text-[10px] font-bold text-slate-500 block mb-1">অথবা, ২. অনলাইন লিংক (Photo URL) ব্যবহার করুন</span>
+                        <input
+                          type="text"
+                          placeholder="https://example.com/photo.jpg"
+                          value={docPhotoUrl}
+                          onChange={(e) => setDocPhotoUrl(e.target.value)}
+                          className="w-full rounded-lg border border-slate-200 py-1.5 px-3 text-xs font-semibold text-slate-800 bg-white focus:outline-none focus:border-[#0284C7]"
+                        />
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
                 {/* Form Buttons */}
@@ -1325,10 +1636,50 @@ export default function AdminDashboard({
                         <td className="p-3">
                           <p className="font-bold text-slate-800">{doc.name}</p>
                           <p className="text-[10px] text-slate-400 mt-0.5 line-clamp-1 font-bold">{doc.degrees}</p>
-                          <div className="flex items-center gap-1.5 mt-1 text-[10px] font-bold text-amber-500 bg-amber-50/50 border border-amber-100/30 rounded px-1.5 py-0.5 w-max">
-                            <span>★ {doc.rating || '5.0'}</span>
-                            <span className="text-slate-400">|</span>
-                            <span className="text-slate-500">{doc.reviewCount || 0} রিভিউ</span>
+                          <div className="flex items-center gap-3 mt-1.5 flex-wrap">
+                            <div className="flex items-center gap-1.5 text-[10px] font-bold text-amber-500 bg-amber-50/50 border border-amber-100/30 rounded px-1.5 py-0.5 w-max">
+                              <span>★ {doc.rating || '5.0'}</span>
+                              <span className="text-slate-400">|</span>
+                              <span className="text-slate-500">{doc.reviewCount || 0} রিভিউ</span>
+                            </div>
+                            
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  const newStatus = doc.isActive === false ? true : false;
+                                  try {
+                                    await updateDoctorStatus(doc.id, newStatus);
+                                    setToastMsg('ডাক্তারের স্ট্যাটাস পরিবর্তন হয়েছে');
+                                    onUpdateDoctor({
+                                      ...doc,
+                                      isActive: newStatus
+                                    });
+                                  } catch (err) {
+                                    console.error('Failed to update doctor status:', err);
+                                  }
+                                }}
+                                className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                                  doc.isActive !== false ? 'bg-[#16A34A]' : 'bg-slate-300'
+                                }`}
+                                title={doc.isActive !== false ? 'নিষ্ক্রিয় করুন' : 'সক্রিয় করুন'}
+                              >
+                                <span
+                                  className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-xs ring-0 transition duration-200 ease-in-out ${
+                                    doc.isActive !== false ? 'translate-x-4' : 'translate-x-0'
+                                  }`}
+                                />
+                              </button>
+                              {doc.isActive !== false ? (
+                                <span className="inline-flex items-center rounded-md bg-emerald-50 px-1.5 py-0.5 text-[9px] font-extrabold text-[#16A34A] border border-emerald-200">
+                                  সক্রিয় (Active)
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center rounded-md bg-slate-50 px-1.5 py-0.5 text-[9px] font-extrabold text-slate-500 border border-slate-200">
+                                  নিষ্ক্রিয় (Inactive)
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </td>
 
@@ -2021,6 +2372,232 @@ export default function AdminDashboard({
         </div>
       )}
 
+      {subTab === 'blogs' && (
+        <div className="space-y-4 animate-in fade-in duration-150">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-sm font-bold text-slate-800">স্বাস্থ্য ব্লগ ও সচেতনতামূলক আর্টিকেল সমূহ</h2>
+              <p className="text-[10px] text-slate-400 mt-0.5 font-bold">ভিজিটরদের সচেতনতা বাড়াতে ছবিসহ ব্লগ পোস্ট এবং টিপস প্রকাশ করুন</p>
+            </div>
+            <button
+              onClick={() => {
+                setEditingBlog(null);
+                setBlogTitle('');
+                setBlogSlug('');
+                setBlogExcerpt('');
+                setBlogContent('');
+                setBlogCoverImage('');
+                setBlogCategory('স্বাস্থ্য সচেতনতা');
+                setBlogAuthor('MyDocBD মেডিকেল টিম');
+                setBlogIsPublished(true);
+                setShowBlogModal(true);
+              }}
+              className="flex items-center gap-1.5 rounded-lg bg-[#0284C7] hover:bg-[#0274af] px-3.5 py-2 text-xs font-bold text-white transition cursor-pointer"
+            >
+              <PlusCircle className="h-3.5 w-3.5" />
+              <span>নতুন ব্লগ আর্টিকেল লিখুন</span>
+            </button>
+          </div>
+
+          <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200">
+                  <th className="p-3 text-[11px]">ব্লগ কভার ও শিরোনাম</th>
+                  <th className="p-3 text-[11px]">ক্যাটাগরি</th>
+                  <th className="p-3 text-[11px]">লেখক</th>
+                  <th className="p-3 text-[11px]">পাঠক সংখ্যা</th>
+                  <th className="p-3 text-[11px]">অবস্থা (Status)</th>
+                  <th className="p-3 text-center text-[11px]">অ্যাকশন</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 font-bold text-slate-700">
+                {blogsList.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="p-8 text-center text-slate-400 font-bold">
+                      কোন ব্লগ পাওয়া যায়নি। নতুন একটি ব্লগ আর্টিকেল তৈরি করুন।
+                    </td>
+                  </tr>
+                ) : (
+                  blogsList.map((blog) => (
+                    <tr key={blog.id} className="hover:bg-slate-50/50">
+                      <td className="p-3 text-xs">
+                        <div className="flex items-center gap-3">
+                          <img
+                            src={blog.coverImage || 'https://images.unsplash.com/photo-1505751172876-fa1923c5c528?auto=format&fit=crop&q=80&w=150'}
+                            alt={blog.title}
+                            className="h-10 w-16 object-cover rounded border border-slate-100 bg-slate-100 shrink-0"
+                            referrerPolicy="no-referrer"
+                          />
+                          <div>
+                            <span className="font-extrabold text-slate-900 line-clamp-1 block">{blog.title}</span>
+                            <span className="text-[10px] text-slate-400 font-bold block mt-0.5 font-mono">slug: {blog.slug}</span>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="p-3 text-xs">
+                        <span className="inline-flex rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] text-emerald-700 border border-emerald-100">
+                          {blog.category || 'স্বাস্থ্য সচেতনতা'}
+                        </span>
+                      </td>
+                      <td className="p-3 text-slate-500 text-xs font-semibold">{blog.author}</td>
+                      <td className="p-3 text-slate-700 text-xs font-mono">{blog.views || 0} বার পঠিত</td>
+                      <td className="p-3">
+                        <span className={`inline-flex rounded-full px-2 py-0.5 text-[9px] ${
+                          blog.isPublished
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                            : 'bg-amber-50 text-amber-600 border border-amber-200'
+                        }`}>
+                          {blog.isPublished ? 'প্রকাশিত (Published)' : 'খসড়া (Draft)'}
+                        </span>
+                      </td>
+                      <td className="p-3">
+                        <div className="flex items-center justify-center gap-2">
+                          <button
+                            onClick={() => {
+                              setEditingBlog(blog);
+                              setBlogTitle(blog.title);
+                              setBlogSlug(blog.slug);
+                              setBlogExcerpt(blog.excerpt || '');
+                              setBlogContent(blog.content);
+                              setBlogCoverImage(blog.coverImage || '');
+                              setBlogCategory(blog.category || 'স্বাস্থ্য সচেতনতা');
+                              setBlogAuthor(blog.author || 'MyDocBD মেডিকেল টিম');
+                              setBlogIsPublished(blog.isPublished);
+                              setShowBlogModal(true);
+                            }}
+                            className="inline-flex items-center gap-1 rounded bg-slate-50 border border-slate-200 text-[10px] text-slate-600 hover:border-slate-400 py-1 px-2 cursor-pointer"
+                          >
+                            <Edit2 className="h-3 w-3" />
+                            <span>সম্পাদনা</span>
+                          </button>
+                          <button
+                            onClick={() => handleBlogDelete(blog.id, blog.title)}
+                            className="inline-flex items-center gap-1 rounded bg-red-50 border border-red-100 text-[10px] text-red-600 hover:bg-red-100 py-1 px-2 cursor-pointer"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                            <span>মুছুন</span>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {subTab === 'banners' && (
+        <div className="space-y-4 animate-in fade-in duration-150">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-sm font-bold text-slate-800">প্রোমো ব্যানার ও বিজ্ঞাপন প্যানেল</h2>
+              <p className="text-[10px] text-slate-400 mt-0.5 font-bold">বিভিন্ন স্লটে বিজ্ঞাপন এবং প্রোমো ব্যানার ব্যানার নিয়ন্ত্রণ করুন</p>
+            </div>
+            <button
+              onClick={() => {
+                setEditingBanner(null);
+                setBannerTitle('');
+                setBannerImageUrl('');
+                setBannerTargetUrl('');
+                setBannerSlot('hero');
+                setBannerIsActive(true);
+                setShowBannerModal(true);
+              }}
+              className="flex items-center gap-1.5 rounded-lg bg-[#0284C7] hover:bg-[#0274af] px-3.5 py-2 text-xs font-bold text-white transition cursor-pointer"
+            >
+              <PlusCircle className="h-3.5 w-3.5" />
+              <span>নতুন প্রোমো ব্যানার যোগ করুন</span>
+            </button>
+          </div>
+
+          <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200">
+                  <th className="p-3 text-[11px]">ব্যানার ছবি ও শিরোনাম</th>
+                  <th className="p-3 text-[11px]">স্লট / পজিশন</th>
+                  <th className="p-3 text-[11px]">টার্গেট লিংক (URL)</th>
+                  <th className="p-3 text-[11px]">অবস্থা (Status)</th>
+                  <th className="p-3 text-center text-[11px]">অ্যাকশন</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 font-bold text-slate-700">
+                {bannersList.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="p-8 text-center text-slate-400 font-bold">
+                      কোন প্রোমো ব্যানার পাওয়া যায়নি। নতুন একটি ব্যানার তৈরি করুন।
+                    </td>
+                  </tr>
+                ) : (
+                  bannersList.map((banner) => (
+                    <tr key={banner.id} className="hover:bg-slate-50/50">
+                      <td className="p-3 text-xs">
+                        <div className="flex items-center gap-3">
+                          <img
+                            src={banner.imageUrl}
+                            alt={banner.title}
+                            className="h-10 w-24 object-cover rounded border border-slate-100 bg-slate-100 shrink-0"
+                            referrerPolicy="no-referrer"
+                          />
+                          <span className="font-extrabold text-slate-900">{banner.title}</span>
+                        </div>
+                      </td>
+                      <td className="p-3 text-xs">
+                        <span className="inline-flex rounded bg-rose-50 px-1.5 py-0.5 text-[10px] text-rose-700 border border-rose-100">
+                          {banner.slot === 'hero' ? 'হিরো সেকশন (Top Hero)' : 
+                           banner.slot === 'directory' ? 'ডাক্তার ডিরেক্টরি (Directory Top)' :
+                           banner.slot === 'sidebar' ? 'সাইডবার স্লট (Sidebar Ad)' : 
+                           'ফুটার স্লট (Footer Ad)'}
+                        </span>
+                      </td>
+                      <td className="p-3 text-slate-500 text-xs font-semibold truncate max-w-xs">{banner.targetUrl || 'কোন লিংক নেই'}</td>
+                      <td className="p-3">
+                        <span className={`inline-flex rounded-full px-2 py-0.5 text-[9px] ${
+                          banner.isActive
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                            : 'bg-slate-100 text-slate-400 border border-slate-200'
+                        }`}>
+                          {banner.isActive ? 'সক্রিয় (Active)' : 'নিষ্ক্রিয়'}
+                        </span>
+                      </td>
+                      <td className="p-3">
+                        <div className="flex items-center justify-center gap-2">
+                          <button
+                            onClick={() => {
+                              setEditingBanner(banner);
+                              setBannerTitle(banner.title);
+                              setBannerImageUrl(banner.imageUrl);
+                              setBannerTargetUrl(banner.targetUrl || '');
+                              setBannerSlot(banner.slot);
+                              setBannerIsActive(banner.isActive);
+                              setShowBannerModal(true);
+                            }}
+                            className="inline-flex items-center gap-1 rounded bg-slate-50 border border-slate-200 text-[10px] text-slate-600 hover:border-slate-400 py-1 px-2 cursor-pointer"
+                          >
+                            <Edit2 className="h-3 w-3" />
+                            <span>সম্পাদনা</span>
+                          </button>
+                          <button
+                            onClick={() => handleBannerDelete(banner.id, banner.title)}
+                            className="inline-flex items-center gap-1 rounded bg-red-50 border border-red-100 text-[10px] text-red-600 hover:bg-red-100 py-1 px-2 cursor-pointer"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                            <span>মুছুন</span>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       {/* Add / Edit District Modal Overlay */}
       {showAddDistrictModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 animate-in fade-in duration-100">
@@ -2569,6 +3146,265 @@ export default function AdminDashboard({
               </div>
             </form>
           </div>
+        </div>
+      )}
+
+      {showBlogModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 animate-in fade-in duration-100">
+          <div className="w-full max-w-3xl bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4 bg-slate-50/50">
+              <h3 className="font-extrabold text-slate-800 text-sm">
+                {editingBlog ? 'ব্লগ সংশোধন ও সম্পাদনা' : 'নতুন ব্লগ রাইটার প্যানেল'}
+              </h3>
+              <button
+                onClick={() => {
+                  setShowBlogModal(false);
+                  setEditingBlog(null);
+                }}
+                className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700 cursor-pointer"
+              >
+                <X className="h-4.5 w-4.5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleBlogSubmit} className="p-6 space-y-4 text-xs font-semibold overflow-y-auto max-h-[80vh]">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[#0284C7] mb-1 font-bold">আর্টিকেলের শিরোনাম (Title) *</label>
+                  <input
+                    type="text"
+                    required
+                    value={blogTitle}
+                    onChange={(e) => {
+                      setBlogTitle(e.target.value);
+                      if (!editingBlog) {
+                        setBlogSlug(e.target.value.toLowerCase()
+                          .replace(/[\s_]+/g, '-')
+                          .replace(/[^\w\u0980-\u09ff-]/g, '')
+                        );
+                      }
+                    }}
+                    className="w-full rounded-lg border border-slate-200 bg-slate-50/50 py-2 px-3 text-xs font-bold text-slate-800 outline-none focus:border-[#0284C7] focus:bg-white"
+                    placeholder="যেমন: ডেঙ্গু জ্বরের লক্ষণ ও চিকিৎসা"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-500 mb-1 font-bold">ইউআরএল কাস্টম স্ল্যাগ (Slug) *</label>
+                  <input
+                    type="text"
+                    required
+                    value={blogSlug}
+                    onChange={(e) => setBlogSlug(e.target.value)}
+                    className="w-full rounded-lg border border-slate-200 bg-slate-50/50 py-2 px-3 text-xs font-bold text-slate-800 outline-none focus:border-[#0284C7] focus:bg-white"
+                    placeholder="যেমন: dengue-fever-symptoms"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-slate-500 mb-1 font-bold">ক্যাটাগরি</label>
+                  <input
+                    type="text"
+                    value={blogCategory}
+                    onChange={(e) => setBlogCategory(e.target.value)}
+                    className="w-full rounded-lg border border-slate-200 bg-slate-50/50 py-2 px-3 text-xs font-bold text-slate-800 outline-none focus:border-[#0284C7] focus:bg-white"
+                    placeholder="যেমন: স্বাস্থ্য টিপস"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-500 mb-1 font-bold">লেখক (Author)</label>
+                  <input
+                    type="text"
+                    value={blogAuthor}
+                    onChange={(e) => setBlogAuthor(e.target.value)}
+                    className="w-full rounded-lg border border-slate-200 bg-slate-50/50 py-2 px-3 text-xs font-bold text-slate-800 outline-none focus:border-[#0284C7] focus:bg-white"
+                    placeholder="যেমন: MyDocBD মেডিকেল টিম"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-500 mb-1 font-bold">কভার ছবির লিংক (Image URL)</label>
+                  <input
+                    type="text"
+                    value={blogCoverImage}
+                    onChange={(e) => setBlogCoverImage(e.target.value)}
+                    className="w-full rounded-lg border border-slate-200 bg-slate-50/50 py-2 px-3 text-xs font-bold text-slate-800 outline-none focus:border-[#0284C7] focus:bg-white"
+                    placeholder="Unsplash ছবির লিঙ্ক"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-slate-500 mb-1 font-bold">সংক্ষিপ্ত সারমর্ম (Excerpt - অনূর্ধ্ব ১৫০ শব্দ)</label>
+                <textarea
+                  rows={2}
+                  value={blogExcerpt}
+                  onChange={(e) => setBlogExcerpt(e.target.value)}
+                  className="w-full rounded-lg border border-slate-200 bg-slate-50/50 py-2 px-3 text-xs font-bold text-slate-800 outline-none focus:border-[#0284C7] focus:bg-white"
+                  placeholder="ব্লগটির সংক্ষিপ্ত বিবরণ দিন যা লিস্ট ভিউতে কার্ডে দেখাবে..."
+                />
+              </div>
+
+              <div>
+                <label className="block text-[#0284C7] mb-1 font-bold">মূল ব্লগ কনটেন্ট (Content - HTML বা প্লেইন টেক্সট সমর্থন করে) *</label>
+                <textarea
+                  rows={8}
+                  required
+                  value={blogContent}
+                  onChange={(e) => setBlogContent(e.target.value)}
+                  className="w-full rounded-lg border border-slate-200 bg-slate-50/50 py-2 px-3 text-xs font-bold text-slate-800 outline-none focus:border-[#0284C7] focus:bg-white font-mono"
+                  placeholder="এখানে আপনার ব্লগের বিস্তারিত তথ্য লিখুন। অনুচ্ছেদ তৈরিতে স্বাভাবিক লেখা লিখুন বা HTML ট্যাগ ব্যবহার করতে পারেন।"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 py-1">
+                <input
+                  type="checkbox"
+                  id="blog-publish"
+                  checked={blogIsPublished}
+                  onChange={(e) => setBlogIsPublished(e.target.checked)}
+                  className="rounded border-slate-300 text-[#0284C7] focus:ring-[#0284C7]"
+                />
+                <label htmlFor="blog-publish" className="text-slate-700 font-bold cursor-pointer">
+                  ব্লগটি সরাসরি পাবলিশ করুন (পাবলিকলি দেখা যাবে)?
+                </label>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-4 border-t border-slate-150">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowBlogModal(false);
+                    setEditingBlog(null);
+                  }}
+                  className="rounded-lg border border-slate-200 px-4 py-2 text-slate-600 hover:bg-slate-50 transition cursor-pointer"
+                >
+                  বাতিল
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-lg bg-[#0284C7] hover:bg-[#0274af] px-5 py-2 text-white font-bold transition cursor-pointer"
+                >
+                  <span>আর্টিকেল সংরক্ষণ করুন</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showBannerModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 animate-in fade-in duration-100">
+          <div className="w-full max-w-md bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-slate-150 px-6 py-4 bg-slate-50/50">
+              <h3 className="font-extrabold text-slate-800 text-sm">
+                {editingBanner ? 'প্রোমো ব্যানার সংশোধন' : 'নতুন প্রোমো ব্যানার ক্যাম্পেইন'}
+              </h3>
+              <button
+                onClick={() => {
+                  setShowBannerModal(false);
+                  setEditingBanner(null);
+                }}
+                className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700 cursor-pointer"
+              >
+                <X className="h-4.5 w-4.5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleBannerSubmit} className="p-6 space-y-4 text-xs font-semibold">
+              <div>
+                <label className="block text-[#0284C7] mb-1 font-bold">ক্যাম্পেইন / ব্যানার টাইটেল *</label>
+                <input
+                  type="text"
+                  required
+                  value={bannerTitle}
+                  onChange={(e) => setBannerTitle(e.target.value)}
+                  className="w-full rounded-lg border border-slate-200 bg-slate-50/50 py-2 px-3 text-xs font-bold text-slate-800 outline-none focus:border-[#0284C7] focus:bg-white"
+                  placeholder="যেমন: ডেন্টাল চেকআপে ৫০% ডিসকাউন্ট"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[#0284C7] mb-1 font-bold">ব্যানার ইমেজ লিংক (Image URL) *</label>
+                <input
+                  type="text"
+                  required
+                  value={bannerImageUrl}
+                  onChange={(e) => setBannerImageUrl(e.target.value)}
+                  className="w-full rounded-lg border border-slate-200 bg-slate-50/50 py-2 px-3 text-xs font-bold text-slate-800 outline-none focus:border-[#0284C7] focus:bg-white"
+                  placeholder="যেমন: https://images.unsplash.com/photo-1505751172876-fa1923c5c528"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-500 mb-1 font-bold">বিজ্ঞাপন স্লট / অবস্থান (Position)</label>
+                <select
+                  value={bannerSlot}
+                  onChange={(e) => setBannerSlot(e.target.value as any)}
+                  className="w-full rounded-lg border border-slate-200 bg-white py-2 px-3 text-xs font-bold text-slate-800 outline-none focus:border-[#0284C7]"
+                >
+                  <option value="hero">হিরো স্লট (Landing page top)</option>
+                  <option value="directory">ডিরেক্টরি স্লট (Doctor search page top)</option>
+                  <option value="sidebar">সাইডবার স্লট (Sidebar Ad space)</option>
+                  <option value="footer">ফুটার স্লট (Page footer row)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-slate-500 mb-1 font-bold">বিজ্ঞাপন টার্গেট লিংক (Destination Link)</label>
+                <input
+                  type="text"
+                  value={bannerTargetUrl}
+                  onChange={(e) => setBannerTargetUrl(e.target.value)}
+                  className="w-full rounded-lg border border-slate-200 bg-slate-50/50 py-2 px-3 text-xs font-bold text-slate-800 outline-none focus:border-[#0284C7] focus:bg-white"
+                  placeholder="যেমন: https://mydocbd.com/doctors"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 py-1">
+                <input
+                  type="checkbox"
+                  id="banner-active"
+                  checked={bannerIsActive}
+                  onChange={(e) => setBannerIsActive(e.target.checked)}
+                  className="rounded border-slate-300 text-[#0284C7] focus:ring-[#0284C7]"
+                />
+                <label htmlFor="banner-active" className="text-slate-700 font-bold cursor-pointer">
+                  ব্যানারটি সক্রিয় রাখুন (সরাসরি ইউজারদের দেখাবে)?
+                </label>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-4 border-t border-slate-150">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowBannerModal(false);
+                    setEditingBanner(null);
+                  }}
+                  className="rounded-lg border border-slate-200 px-4 py-2 text-slate-600 hover:bg-slate-50 transition cursor-pointer"
+                >
+                  বাতিল
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-lg bg-[#0284C7] hover:bg-[#0274af] px-5 py-2 text-white font-bold transition cursor-pointer"
+                >
+                  <span>বিজ্ঞাপন ব্যানার সংরক্ষণ</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Dynamic Slide-in Toast Feedback */}
+      {toastMsg && (
+        <div className="fixed bottom-5 right-5 z-50 flex items-center gap-2 rounded-lg bg-slate-900 text-white px-4 py-3 text-xs font-bold shadow-lg border border-slate-800 animate-in fade-in slide-in-from-bottom-5 duration-200">
+          <Check className="h-4 w-4 text-emerald-500 shrink-0" />
+          <span>{toastMsg}</span>
         </div>
       )}
     </div>

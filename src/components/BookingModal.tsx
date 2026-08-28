@@ -281,15 +281,15 @@ export default function BookingModal({
               ● সিরিয়াল রিকোয়েস্টটি পর্যালোচনায় আছে
             </span>
 
-            <h2 className="text-xl font-bold text-slate-800">সিরিয়াল আবেদন সফলভাবে জমা হয়েছে!</h2>
+            <h2 className="text-xl font-bold text-slate-800">MyDocBD-তে আপনার রিকোয়েস্টটি গৃহীত হয়েছে।</h2>
             
             {/* The exact requested text */}
             <div className="mx-auto mt-4 max-w-md rounded-xl bg-slate-50 border border-slate-200 p-5 text-center shadow-sm">
-              <p className="text-xs font-bold text-[#0284C7] mb-1.5 uppercase tracking-wide">আপনার ট্র্যাকিং মোবাইল নম্বর</p>
+              <p className="text-xs font-bold text-sky-600 mb-1.5 uppercase tracking-wide">আপনার ট্র্যাকিং মোবাইল নম্বর</p>
               <p className="text-xl font-black text-slate-800 font-mono tracking-wider">{patientMobile}</p>
               
               <p className="mt-4 text-xs font-bold text-slate-700 leading-relaxed bg-white rounded-lg p-3 border border-slate-100">
-                আপনার সিরিয়াল রিকোয়েস্টটি সফলভাবে জমা হয়েছে। আপনার মোবাইল নম্বর দিয়ে যেকোনো সময় সিরিয়ালের সর্বশেষ আপডেট দেখতে পারবেন।
+                MyDocBD টিম সরাসরি চেম্বার থেকে সিরিয়াল নিশ্চিত করে আপনাকে আপডেট জানাবে।
               </p>
             </div>
 

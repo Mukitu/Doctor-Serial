@@ -39,7 +39,7 @@ export default function PortalLogin({ onLoginSuccess }: PortalLoginProps) {
       setEmail('nishat.af27@gmail.com');
       setPassword('admin123'); // Standard mock password
     } else {
-      setEmail('admin@sebaserial.com');
+      setEmail('admin@mydocbd.com');
       setPassword('admin123');
     }
   };
@@ -49,11 +49,11 @@ export default function PortalLogin({ onLoginSuccess }: PortalLoginProps) {
       <div className="w-full max-w-md space-y-8 rounded-xl border border-slate-200 bg-white p-8 shadow-sm">
         {/* Branding & Logo header */}
         <div className="text-center">
-          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-[#0284C7] text-white shadow-md shadow-sky-100">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-sky-600 text-white shadow-md shadow-sky-100">
             <HeartPulse className="h-6 w-6" />
           </div>
-          <h2 className="mt-4 text-2xl font-black text-slate-900 tracking-tight">
-            সেবা<span className="text-[#0284C7]">সিরিয়াল</span> পোর্টাল
+          <h2 className="mt-4 text-xl font-black text-slate-900 tracking-tight">
+            MyDocBD Admin Portal - লগইন করুন
           </h2>
           <p className="mt-1.5 text-xs font-bold text-slate-400">
             সিস্টেম নিরাপত্তা ও অ্যাডমিন অ্যাক্সেস কন্ট্রোল প্যানেল
@@ -87,7 +87,7 @@ export default function PortalLogin({ onLoginSuccess }: PortalLoginProps) {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full rounded-lg border border-slate-200 bg-slate-50/50 py-2.5 pl-10 pr-4 text-xs font-bold text-slate-800 placeholder-slate-400 focus:border-[#0284C7] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#0284C7]"
-                placeholder="admin@sebaserial.com"
+                placeholder="admin@mydocbd.com"
               />
             </div>
           </div>

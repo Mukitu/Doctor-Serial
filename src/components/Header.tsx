@@ -41,14 +41,14 @@ export default function Header({
           onClick={() => { setActiveTab('home'); setMobileMenuOpen(false); }}
           id="platform-logo"
         >
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#0284C7] text-white border border-sky-600/10">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-sky-600 text-white border border-sky-600/10">
             <HeartPulse className="h-5.5 w-5.5" />
           </div>
           <div>
             <h1 className="text-xl font-bold tracking-tight text-slate-900">
-              সেবা<span className="text-[#0284C7] font-extrabold">সিরিয়াল</span>
+              <span className='text-sky-600 font-bold'>MyDoc</span><span className='bg-teal-600 text-white px-1.5 py-0.5 rounded-md ml-0.5 text-xs font-semibold'>BD</span>
             </h1>
-            <p className="text-[9px] text-slate-400 font-bold tracking-wider uppercase">Smart Doctor Serial</p>
+            <p className="text-[9px] text-slate-400 font-bold tracking-wider uppercase">ডিজিটাল হেলথ ডিরেক্টরি</p>
           </div>
         </div>
 
@@ -95,6 +95,17 @@ export default function Header({
               id="nav-doctors-btn"
             >
               ডাক্তার ডিরেক্টরি
+            </button>
+            <button
+              onClick={() => setActiveTab('blog')}
+              className={`rounded-lg px-3.5 py-1.5 text-xs font-bold transition ${
+                activeTab === 'blog'
+                  ? 'bg-slate-100 text-slate-900 border border-slate-200/50'
+                  : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'
+              }`}
+              id="nav-blog-btn"
+            >
+              স্বাস্থ্য ব্লগ
             </button>
             {currentAdmin && (
               <button
@@ -190,6 +201,14 @@ export default function Header({
               }`}
             >
               ডাক্তার ডিরেক্টরি
+            </button>
+            <button
+              onClick={() => { setActiveTab('blog'); setMobileMenuOpen(false); }}
+              className={`flex w-full items-center rounded-lg px-4 py-2.5 text-xs font-bold transition ${
+                activeTab === 'blog' ? 'bg-slate-100 text-slate-900' : 'text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              স্বাস্থ্য ব্লগ
             </button>
             {currentAdmin && (
               <>
