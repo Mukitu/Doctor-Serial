@@ -49,7 +49,8 @@ import {
   deletePromoBanner,
   uploadBannerImage,
   updateDoctorStatus,
-  upsertDoctorWithChambers
+  upsertDoctorWithChambers,
+  getSpecialties
 } from '../lib/supabase';
 import AdminLayout from './admin/AdminLayout';
 import DoctorFormModal from './admin/DoctorFormModal';
@@ -1651,7 +1652,14 @@ export default function AdminDashboard({
       )}
 
       {subTab === 'specialties' && (
-        <AdminSpecialtiesPage />
+        <AdminSpecialtiesPage
+          onSpecialtiesChange={async () => {
+            const refreshed = await getSpecialties();
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new CustomEvent('sheba_specialties_updated', { detail: refreshed }));
+            }
+          }}
+        />
       )}
 
       {subTab === 'blogs' && (

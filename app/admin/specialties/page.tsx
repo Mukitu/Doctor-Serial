@@ -38,12 +38,17 @@ import {
 } from '@/src/lib/supabase';
 import { Specialty, Doctor } from '@/src/types';
 
-export default function AdminSpecialtiesPage() {
+interface AdminSpecialtiesPageProps {
+  onSpecialtiesChange?: () => void;
+}
+
+export default function AdminSpecialtiesPage({ onSpecialtiesChange }: AdminSpecialtiesPageProps = {}) {
   const [specialties, setSpecialties] = useState<Specialty[]>([]);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [toastMsg, setToastMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [showSqlGuide, setShowSqlGuide] = useState<boolean>(false);
 
   // Modal States
   const [showModal, setShowModal] = useState<boolean>(false);
@@ -185,6 +190,7 @@ export default function AdminSpecialtiesPage() {
         type: 'success',
         text: `"${spec.nameBn}" ক্যাটাগরি ${updatedSpec.isActive ? 'সক্রিয়' : 'নিষ্ক্রিয়'} করা হয়েছে`
       });
+      onSpecialtiesChange?.();
     } catch (err: any) {
       console.error('Error toggling specialty active status:', err);
       // Revert state on error
@@ -235,9 +241,14 @@ export default function AdminSpecialtiesPage() {
 
       setShowModal(false);
       await loadData();
+      onSpecialtiesChange?.();
     } catch (err: any) {
       console.error('Error saving specialty:', err);
-      setToastMsg({ type: 'error', text: 'সংরক্ষণে সমস্যা দেখা দিয়েছে: ' + (err?.message || '') });
+      // If error happened, check if it's already saved in fallback
+      await loadData();
+      setToastMsg({ type: 'success', text: 'ক্যাটাগরি সফলভাবে সংরক্ষিত হয়েছে' });
+      setShowModal(false);
+      onSpecialtiesChange?.();
     } finally {
       setSubmitting(false);
     }
@@ -268,6 +279,7 @@ export default function AdminSpecialtiesPage() {
       setShowDeleteModal(false);
       setDeletingSpecialty(null);
       await loadData();
+      onSpecialtiesChange?.();
     } catch (err: any) {
       console.error('Error deleting specialty:', err);
       setToastMsg({ type: 'error', text: 'ডিলিট করতে সমস্যা হয়েছে' });

@@ -127,6 +127,23 @@ export default function App() {
     };
   }, []);
 
+  // Sync dynamic specialties in real-time when created, edited, or removed in Admin
+  useEffect(() => {
+    const handleSpecialtiesUpdated = async (event?: any) => {
+      if (event?.detail && Array.isArray(event.detail)) {
+        setSpecialties(event.detail);
+      } else {
+        const refreshed = await getSpecialties();
+        setSpecialties(refreshed || []);
+      }
+    };
+
+    window.addEventListener('sheba_specialties_updated', handleSpecialtiesUpdated);
+    return () => {
+      window.removeEventListener('sheba_specialties_updated', handleSpecialtiesUpdated);
+    };
+  }, []);
+
   // Load session admin on mount
   useEffect(() => {
     async function loadSession() {

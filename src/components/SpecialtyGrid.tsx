@@ -22,56 +22,44 @@ export default function SpecialtyGrid({
   subtitle = "আপনার কাঙ্ক্ষিত রোগ অনুযায়ী সঠিক বিশেষজ্ঞ নির্বাচন করুন",
   showViewAllBtn = true,
 }: SpecialtyGridProps) {
-  const [items, setItems] = useState<Specialty[]>(initialSpecialties || []);
-  const [loading, setLoading] = useState(!initialSpecialties || initialSpecialties.length === 0);
+  const [items, setItems] = useState<Specialty[]>(initialSpecialties ? initialSpecialties.filter(s => s.isActive !== false) : []);
+  const [loading, setLoading] = useState(false);
 
+  // Sync with initialSpecialties whenever prop changes
   useEffect(() => {
-    if (initialSpecialties && initialSpecialties.length > 0) {
+    if (initialSpecialties !== undefined) {
       setItems(initialSpecialties.filter(s => s.isActive !== false));
-      setLoading(false);
-      return;
     }
-
-    let isMounted = true;
-    async function fetchSpecialties() {
-      setLoading(true);
-      try {
-        if (supabase) {
-          const { data, error } = await supabase
-            .from('specialties')
-            .select('*')
-            .eq('is_active', true)
-            .order('display_order', { ascending: true });
-
-          if (!error && data && data.length > 0) {
-            const mapped: Specialty[] = data.map(s => ({
-              id: s.id,
-              nameBn: s.name_bn,
-              nameEn: s.name_en,
-              slug: s.slug || (s.name_en ? s.name_en.toLowerCase().replace(/[^a-z0-9]+/g, '-') : ''),
-              iconUrl: s.icon_url || s.icon_name || '',
-              iconName: s.icon_name || '',
-              isActive: s.is_active !== false,
-              displayOrder: s.display_order ?? 1
-            }));
-            if (isMounted) setItems(mapped);
-            setLoading(false);
-            return;
-          }
-        }
-        
-        // Local fallback if Supabase table is empty or offline
-        const local = await getSpecialties();
-        if (isMounted) setItems(local.filter(s => s.isActive !== false));
-      } catch (err) {
-        console.error('Error fetching specialties in SpecialtyGrid:', err);
-      } finally {
-        if (isMounted) setLoading(false);
-      }
-    }
-
-    fetchSpecialties();
   }, [initialSpecialties]);
+
+  // Real-time synchronization listener for any admin updates (add, edit, delete, toggle)
+  useEffect(() => {
+    let isMounted = true;
+    const handleSpecialtiesUpdated = async (event?: any) => {
+      if (event?.detail && Array.isArray(event.detail)) {
+        if (isMounted) {
+          setItems(event.detail.filter((s: Specialty) => s.isActive !== false));
+        }
+      } else {
+        const refreshed = await getSpecialties();
+        if (isMounted) {
+          setItems(refreshed.filter(s => s.isActive !== false));
+        }
+      }
+    };
+
+    window.addEventListener('sheba_specialties_updated', handleSpecialtiesUpdated);
+
+    // Initial fetch if no initialSpecialties provided
+    if (!initialSpecialties || initialSpecialties.length === 0) {
+      handleSpecialtiesUpdated();
+    }
+
+    return () => {
+      isMounted = false;
+      window.removeEventListener('sheba_specialties_updated', handleSpecialtiesUpdated);
+    };
+  }, []);
 
   const handleCardClick = (spec: Specialty) => {
     if (onSelectSpecialty) {

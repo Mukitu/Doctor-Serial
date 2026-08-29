@@ -139,8 +139,8 @@ export default function Hero({
     ? specialties
         .filter(s => s.isActive !== false)
         .sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0))
-        .map(s => ({ id: s.id, name: s.nameBn, labelEn: s.nameEn, icon: s.iconName }))
-    : POPULAR_SPECIALTIES;
+        .map(s => ({ id: s.id, name: s.nameBn, labelEn: s.nameEn, icon: s.iconName || s.iconUrl }))
+    : [];
 
   const currentDistrictObj = districts.find(
     d => d.nameBn === selectedDistrict || d.id === selectedDistrict || d.nameEn?.toLowerCase() === selectedDistrict.toLowerCase()

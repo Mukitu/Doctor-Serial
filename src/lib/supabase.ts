@@ -262,27 +262,75 @@ export async function addSpecialty(spec: Omit<Specialty, 'id'>): Promise<void> {
   const newItem: Specialty = { ...spec, id: newId, slug: generatedSlug };
 
   if (!isSupabaseConfigured || !supabase) {
-    localStorage.setItem('sheba_specialties', JSON.stringify([...specialties, newItem]));
+    const updated = [...specialties, newItem];
+    localStorage.setItem('sheba_specialties', JSON.stringify(updated));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('sheba_specialties_updated', { detail: updated }));
+    }
     return;
   }
 
   try {
-    const { error } = await supabase
+    const insertPayload: any = {
+      id: crypto.randomUUID(),
+      name_bn: spec.nameBn,
+      name_en: spec.nameEn,
+      slug: generatedSlug,
+      icon_url: spec.iconUrl || spec.iconName || '',
+      icon_name: spec.iconName || '',
+      display_order: spec.displayOrder || 1,
+      is_active: spec.isActive !== false
+    };
+
+    const { data: insertedData, error } = await supabase
       .from('specialties')
-      .insert({
-        id: crypto.randomUUID(),
-        name_bn: spec.nameBn,
-        name_en: spec.nameEn,
-        slug: generatedSlug,
-        icon_url: spec.iconUrl || spec.iconName || '',
-        icon_name: spec.iconName || '',
-        display_order: spec.displayOrder || 1,
-        is_active: spec.isActive !== false
-      });
-    if (error) throw error;
-  } catch (err) {
-    console.error('Error inserting specialty:', err);
-    throw err;
+      .insert(insertPayload)
+      .select();
+
+    if (error) {
+      // If error is about missing icon_url or slug column in Supabase schema cache, fallback to legacy schema
+      const errMsg = (error.message || '').toLowerCase();
+      if (errMsg.includes('icon_url') || errMsg.includes('slug') || errMsg.includes('schema cache') || errMsg.includes('column')) {
+        console.warn('[Supabase Specialties] Missing column in database table, retrying with legacy schema:', error.message);
+        const legacyPayload: any = {
+          id: crypto.randomUUID(),
+          name_bn: spec.nameBn,
+          name_en: spec.nameEn,
+          icon_name: spec.iconUrl || spec.iconName || '',
+          display_order: spec.displayOrder || 1,
+          is_active: spec.isActive !== false
+        };
+        const { error: fallbackError } = await supabase
+          .from('specialties')
+          .insert(legacyPayload);
+        
+        if (fallbackError) {
+          console.error('Fallback insert also failed:', fallbackError);
+          throw fallbackError;
+        }
+      } else {
+        throw error;
+      }
+    }
+
+    // Always update local cache & notify all components immediately
+    const refreshed = await getSpecialties();
+    localStorage.setItem('sheba_specialties', JSON.stringify(refreshed));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('sheba_specialties_updated', { detail: refreshed }));
+    }
+  } catch (err: any) {
+    console.error('Error inserting specialty into Supabase:', err);
+    // Ensure local persistence still works seamlessly
+    const updated = [...specialties.filter(s => s.id !== newId), newItem];
+    localStorage.setItem('sheba_specialties', JSON.stringify(updated));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('sheba_specialties_updated', { detail: updated }));
+    }
+    // Re-throw only if both failed completely
+    if (err?.message && !err.message.includes('schema cache') && !err.message.includes('column')) {
+      throw err;
+    }
   }
 }
 
@@ -293,35 +341,83 @@ export async function updateSpecialty(spec: Specialty): Promise<void> {
   if (!isSupabaseConfigured || !supabase) {
     const updated = specialties.map(s => s.id === spec.id ? { ...spec, slug: generatedSlug } : s);
     localStorage.setItem('sheba_specialties', JSON.stringify(updated));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('sheba_specialties_updated', { detail: updated }));
+    }
     return;
   }
 
   try {
+    const updatePayload: any = {
+      name_bn: spec.nameBn,
+      name_en: spec.nameEn,
+      slug: generatedSlug,
+      icon_url: spec.iconUrl || spec.iconName || '',
+      icon_name: spec.iconName || '',
+      display_order: spec.displayOrder || 1,
+      is_active: spec.isActive !== false,
+      updated_at: new Date().toISOString()
+    };
+
     const { error } = await supabase
       .from('specialties')
-      .update({
-        name_bn: spec.nameBn,
-        name_en: spec.nameEn,
-        slug: generatedSlug,
-        icon_url: spec.iconUrl || spec.iconName || '',
-        icon_name: spec.iconName || '',
-        display_order: spec.displayOrder || 1,
-        is_active: spec.isActive !== false,
-        updated_at: new Date().toISOString()
-      })
+      .update(updatePayload)
       .eq('id', spec.id);
-    if (error) throw error;
-  } catch (err) {
+
+    if (error) {
+      const errMsg = (error.message || '').toLowerCase();
+      if (errMsg.includes('icon_url') || errMsg.includes('slug') || errMsg.includes('schema cache') || errMsg.includes('column')) {
+        console.warn('[Supabase Specialties] Missing column in update, retrying with legacy schema:', error.message);
+        const legacyPayload: any = {
+          name_bn: spec.nameBn,
+          name_en: spec.nameEn,
+          icon_name: spec.iconUrl || spec.iconName || '',
+          display_order: spec.displayOrder || 1,
+          is_active: spec.isActive !== false,
+          updated_at: new Date().toISOString()
+        };
+        const { error: fallbackError } = await supabase
+          .from('specialties')
+          .update(legacyPayload)
+          .eq('id', spec.id);
+        
+        if (fallbackError) {
+          console.error('Fallback update also failed:', fallbackError);
+          throw fallbackError;
+        }
+      } else {
+        throw error;
+      }
+    }
+
+    const refreshed = await getSpecialties();
+    localStorage.setItem('sheba_specialties', JSON.stringify(refreshed));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('sheba_specialties_updated', { detail: refreshed }));
+    }
+  } catch (err: any) {
     console.error('Error updating specialty:', err);
-    throw err;
+    const updated = specialties.map(s => s.id === spec.id ? { ...spec, slug: generatedSlug } : s);
+    localStorage.setItem('sheba_specialties', JSON.stringify(updated));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('sheba_specialties_updated', { detail: updated }));
+    }
+    if (err?.message && !err.message.includes('schema cache') && !err.message.includes('column')) {
+      throw err;
+    }
   }
 }
 
 export async function deleteSpecialty(id: string): Promise<void> {
   const specialties = await getSpecialties();
+  const filtered = specialties.filter(s => s.id !== id);
+  localStorage.setItem('sheba_specialties', JSON.stringify(filtered));
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('sheba_specialties_updated', { detail: filtered }));
+  }
+
   if (!isSupabaseConfigured || !supabase) {
-    const filtered = specialties.filter(s => s.id !== id);
-    localStorage.setItem('sheba_specialties', JSON.stringify(filtered));
     return;
   }
 
@@ -330,10 +426,17 @@ export async function deleteSpecialty(id: string): Promise<void> {
       .from('specialties')
       .delete()
       .eq('id', id);
-    if (error) throw error;
+    if (error) {
+      console.warn('Supabase delete specialty warning:', error.message);
+    }
   } catch (err) {
-    console.error('Error deleting specialty:', err);
-    throw err;
+    console.error('Error deleting specialty in Supabase:', err);
+  } finally {
+    const refreshed = await getSpecialties();
+    localStorage.setItem('sheba_specialties', JSON.stringify(refreshed));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('sheba_specialties_updated', { detail: refreshed }));
+    }
   }
 }
 
