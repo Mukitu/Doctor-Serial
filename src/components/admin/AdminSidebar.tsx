@@ -13,7 +13,8 @@ import {
   UserCheck, 
   Radio,
   Stethoscope,
-  Tag
+  Tag,
+  X
 } from 'lucide-react';
 
 interface AdminSidebarProps {
@@ -27,6 +28,7 @@ interface AdminSidebarProps {
   specialtiesCount?: number;
   currentAdmin: any;
   onSignOut: () => void;
+  onCloseMobile?: () => void;
 }
 
 export default function AdminSidebar({
@@ -39,7 +41,8 @@ export default function AdminSidebar({
   districtsCount,
   specialtiesCount = 0,
   currentAdmin,
-  onSignOut
+  onSignOut,
+  onCloseMobile
 }: AdminSidebarProps) {
   
   const menuItems = [
@@ -112,7 +115,7 @@ export default function AdminSidebar({
   ];
 
   return (
-    <div className="flex h-full w-64 flex-col border-r border-slate-200 bg-slate-900 text-slate-300">
+    <div className="flex h-full w-64 flex-col border-r border-slate-800 bg-slate-900 text-slate-300 shadow-2xl lg:shadow-none">
       
       {/* Brand Header */}
       <div className="flex h-16 items-center justify-between px-5 border-b border-slate-800">
@@ -138,25 +141,39 @@ export default function AdminSidebar({
             </div>
           </div>
         </div>
+
+        {/* Mobile close button */}
+        {onCloseMobile && (
+          <button
+            onClick={onCloseMobile}
+            className="lg:hidden p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer"
+            aria-label="Close sidebar"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        )}
       </div>
 
       {/* Navigation Links */}
-      <nav className="flex-1 space-y-1 px-4 py-6 overflow-y-auto">
+      <nav className="flex-1 space-y-1 px-4 py-4 overflow-y-auto">
         {menuItems.map((item) => {
           const Icon = item.icon;
           const isActive = subTab === item.id;
           return (
             <button
               key={item.id}
-              onClick={() => setSubTab(item.id)}
+              onClick={() => {
+                setSubTab(item.id);
+                onCloseMobile?.();
+              }}
               className={`flex w-full items-center justify-between rounded-xl px-4 py-3 text-xs font-bold transition duration-150 cursor-pointer ${
                 isActive 
-                  ? 'bg-[#0284C7] text-white' 
+                  ? 'bg-[#0284C7] text-white shadow-xs' 
                   : 'text-slate-400 hover:bg-slate-800 hover:text-white'
               }`}
             >
               <div className="flex items-center gap-3">
-                <Icon className={`h-4.5 w-4.5 ${isActive ? 'text-white' : 'text-slate-400 group-hover:text-white'}`} />
+                <Icon className={`h-4.5 w-4.5 ${isActive ? 'text-white' : 'text-slate-400'}`} />
                 <span>{item.label}</span>
               </div>
               {item.badge && (
@@ -186,7 +203,10 @@ export default function AdminSidebar({
             </div>
           </div>
           <button
-            onClick={onSignOut}
+            onClick={() => {
+              onSignOut();
+              onCloseMobile?.();
+            }}
             className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg bg-slate-700/50 hover:bg-rose-950/30 border border-slate-700 hover:border-rose-900/60 px-3 py-2 text-[11px] font-bold text-slate-400 hover:text-rose-400 transition cursor-pointer"
           >
             <LogOut className="h-3.5 w-3.5" />
@@ -198,3 +218,4 @@ export default function AdminSidebar({
     </div>
   );
 }
+

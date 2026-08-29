@@ -37,35 +37,71 @@ export interface SmsTemplateData {
   facilityName?: string;
   serialNo: string;
   roomNo?: string;
+  floor?: string;
+  building?: string;
   visitingTime?: string;
   date?: string;
+  specialInstructions?: string;
 }
 
 /**
- * Concise Bangla SMS Template
- * Low character count to save SMS balance while conveying essential details.
+ * Concise & Highly Informative Bangla SMS Template
+ * Automatically embeds patient name, doctor name, clinic/chamber, serial no, room, floor, building, and visiting time.
  */
 export function generateSmsText(data: SmsTemplateData): string {
-  const patient = data.patientName || 'রোগী';
+  const patient = (data.patientName || 'রোগী').trim();
   
-  let doctor = data.doctorName || 'ডাক্তার';
-  if (!doctor.startsWith('ডাঃ') && !doctor.startsWith('ডাক্তার')) {
+  let doctor = (data.doctorName || 'বিশেষজ্ঞ চিকিৎসক').trim();
+  // Ensure appropriate prefix without duplicate prefixes like "ডাঃ ডাঃ" or "Dr. ডাঃ"
+  const hasPrefix = 
+    doctor.startsWith('ডাঃ') || 
+    doctor.startsWith('ডা.') || 
+    doctor.startsWith('ডা ') || 
+    doctor.startsWith('Dr.') || 
+    doctor.startsWith('Dr ') || 
+    doctor.startsWith('অধ্যাপক') || 
+    doctor.startsWith('সহকারী') || 
+    doctor.startsWith('সহযোগী') ||
+    doctor.startsWith('কনসালটেন্ট');
+  
+  if (!hasPrefix) {
     doctor = `ডাঃ ${doctor}`;
   }
 
-  const facility = data.facilityName || 'হাসপাতাল';
-  const serial = data.serialNo || '০১';
-  const roomStr = data.roomNo ? ` (রুম: ${data.roomNo})` : '';
-  const visitingTime = data.visitingTime || 'নির্ধারিত সময়';
-  const apptDate = data.date || 'আজ/আগামীকাল';
+  const facility = (data.facilityName || 'হাসপাতাল/চেম্বার').trim();
+  const serial = (data.serialNo || '০১').trim();
+  
+  // Location parts: Room, Floor, Building
+  const locationParts: string[] = [];
+  if (data.roomNo && data.roomNo.trim()) {
+    locationParts.push(`রুম: ${data.roomNo.trim()}`);
+  }
+  if (data.floor && data.floor.trim()) {
+    locationParts.push(data.floor.trim());
+  }
+  if (data.building && data.building.trim()) {
+    locationParts.push(data.building.trim());
+  }
+  const locationStr = locationParts.length > 0 ? locationParts.join(', ') : '';
 
-  return `MyDocBD: সিরিয়াল নিশ্চিত।
-রোগী: ${patient}
-${doctor}
-হাসপাতাল: ${facility}
-সিরিয়াল: ${serial}${roomStr}
-সময়: ${visitingTime}, ${apptDate}
-ট্র্যাক: mydocbd.com`;
+  const visitingTime = (data.visitingTime || 'নির্ধারিত সময়').trim();
+  const apptDate = (data.date || 'আজ/আগামীকাল').trim();
+
+  let sms = `MyDocBD: সিরিয়াল নিশ্চিত।\n`;
+  sms += `রোগী: ${patient}\n`;
+  sms += `${doctor}\n`;
+  sms += `হাসপাতাল: ${facility}\n`;
+  sms += `সিরিয়াল: ${serial}\n`;
+  if (locationStr) {
+    sms += `স্থান: ${locationStr}\n`;
+  }
+  sms += `সময়: ${visitingTime}, ${apptDate}\n`;
+  if (data.specialInstructions && data.specialInstructions.trim()) {
+    sms += `নির্দেশনা: ${data.specialInstructions.trim()}\n`;
+  }
+  sms += `ট্র্যাক: mydocbd.com`;
+
+  return sms;
 }
 
 /**

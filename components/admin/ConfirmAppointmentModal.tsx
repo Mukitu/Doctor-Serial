@@ -152,15 +152,18 @@ export default function ConfirmAppointmentModal({
   const patientName = appointment.patient_name || appointment.patientName || 'রোগী';
   const patientMobile = appointment.patient_mobile || appointment.patient_phone || appointment.patientMobile || appointment.patientPhone || '';
 
-  // Generate real-time SMS text
+  // Generate real-time SMS text with full chamber and location details
   const smsText = generateSmsText({
     patientName,
     doctorName,
     facilityName: assignedFacilityName,
     serialNo,
     roomNo: assignedRoomNo,
+    floor: assignedFloor,
+    building: assignedBuilding,
     visitingTime: confirmedVisitingTime,
     date: appointmentDate,
+    specialInstructions: specialInstructions
   });
 
   const smsUri = getSmsUri(patientMobile, smsText);

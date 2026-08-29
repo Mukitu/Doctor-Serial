@@ -157,33 +157,33 @@ export default function DoctorProfileModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">
       {/* Dynamic Schema.org SEO tags */}
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLdData) }} />
       <div 
-        className="relative w-full max-w-3xl rounded-2xl bg-white shadow-2xl border border-slate-200 overflow-hidden my-8"
+        className="relative w-full max-w-3xl rounded-2xl bg-white shadow-2xl border border-slate-200 overflow-hidden my-4 sm:my-8"
         id={`doctor-profile-modal-${doctor.id}`}
       >
         {/* Modal Header */}
-        <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/80 px-6 py-4">
-          <div className="flex items-center gap-2">
-            <span className="flex h-2.5 w-2.5 rounded-full bg-emerald-500"></span>
-            <h2 className="text-sm font-bold text-slate-800">ডাক্তারের বিস্তারিত প্রোফাইল ও রিভিউ</h2>
+        <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/80 px-4 sm:px-6 py-3.5 sm:py-4">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="flex h-2.5 w-2.5 shrink-0 rounded-full bg-emerald-500"></span>
+            <h2 className="text-xs sm:text-sm font-bold text-slate-800 truncate">ডাক্তারের বিস্তারিত প্রোফাইল ও রিভিউ</h2>
           </div>
           <button
             onClick={onClose}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-200/60 hover:text-slate-700 transition cursor-pointer"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-200/60 hover:text-slate-700 transition cursor-pointer"
             id="close-profile-modal-btn"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
 
-        <div className="max-h-[80vh] overflow-y-auto p-6 space-y-6">
+        <div className="max-h-[80vh] overflow-y-auto p-4 sm:p-6 space-y-5 sm:space-y-6">
           {/* Doctor Header Profile */}
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-5 rounded-xl bg-gradient-to-br from-slate-50 to-sky-50/40 border border-slate-200/80">
-            <div className="flex items-center gap-4">
-              <div className="relative flex h-16 w-16 shrink-0 items-center justify-center rounded-xl bg-white text-slate-800 font-extrabold text-lg border border-slate-200 shadow-xs overflow-hidden">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 sm:p-5 rounded-xl bg-gradient-to-br from-slate-50 to-sky-50/40 border border-slate-200/80">
+            <div className="flex items-start sm:items-center gap-3.5 sm:gap-4">
+              <div className="relative flex h-14 w-14 sm:h-16 sm:w-16 shrink-0 items-center justify-center rounded-xl bg-white text-slate-800 font-extrabold text-base sm:text-lg border border-slate-200 shadow-xs overflow-hidden">
                 {doctor.photoUrl ? (
                   <img
                     src={doctor.photoUrl}
@@ -522,14 +522,14 @@ export default function DoctorProfileModal({
         </div>
 
         {/* Modal Footer Actions */}
-        <div className="flex items-center justify-between border-t border-slate-100 bg-slate-50/90 px-6 py-4">
-          <div className="text-xs font-bold text-slate-600">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 border-t border-slate-100 bg-slate-50/90 px-4 sm:px-6 py-3.5 sm:py-4">
+          <div className="text-xs font-bold text-slate-600 text-center sm:text-left">
             পরামর্শ ফি: <span className="text-slate-900 font-extrabold">৳{doctor.feesNew}</span> (নতুন রোগী)
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
             <button
               onClick={onClose}
-              className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 transition cursor-pointer"
+              className="flex-1 sm:flex-none rounded-lg border border-slate-200 bg-white px-4 py-2.5 sm:py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 transition cursor-pointer"
             >
               বন্ধ করুন
             </button>
@@ -538,7 +538,7 @@ export default function DoctorProfileModal({
                 onClose();
                 onBookNow(doctor);
               }}
-              className="rounded-lg bg-[#0284C7] hover:bg-[#0274af] px-6 py-2 text-xs font-bold text-white transition shadow-sm cursor-pointer"
+              className="flex-1 sm:flex-none rounded-lg bg-[#0284C7] hover:bg-[#0274af] px-6 py-2.5 sm:py-2 text-xs font-bold text-white transition shadow-sm cursor-pointer"
               id="modal-book-serial-btn"
             >
               সিরিয়াল বুক করুন

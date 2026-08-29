@@ -13,7 +13,9 @@ import {
   Star,
   Eye,
   X,
-  Filter
+  Filter,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import { Doctor, Specialty, Facility, District } from '../types';
 import { filterDoctorsList } from '../utils/filterDoctors';
@@ -50,6 +52,7 @@ export default function DoctorDirectory({
   const [selectedFacility, setSelectedFacility] = useState(initialFilters.facility);
   const [selectedDays, setSelectedDays] = useState<string[]>([]);
   const [selectedDoctorForModal, setSelectedDoctorForModal] = useState<Doctor | null>(null);
+  const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
 
   // Synchronize initial filters from Hero if changed
   React.useEffect(() => {
@@ -78,6 +81,17 @@ export default function DoctorDirectory({
     resetInitialFilters();
   };
 
+  // Active filter count
+  const activeFiltersCount = useMemo(() => {
+    let count = 0;
+    if (searchTerm) count++;
+    if (selectedSpecialty && selectedSpecialty !== 'সকল বিশেষজ্ঞ' && selectedSpecialty !== 'all') count++;
+    if (selectedFacility && selectedFacility !== 'সকল হাসপাতাল/চেম্বার' && selectedFacility !== 'all') count++;
+    if (selectedDays.length > 0) count += selectedDays.length;
+    if (selectedDistrict && selectedDistrict !== 'সকল জেলা' && selectedDistrict !== 'সকল জেলা (All)' && selectedDistrict !== 'all') count++;
+    return count;
+  }, [searchTerm, selectedSpecialty, selectedFacility, selectedDays, selectedDistrict]);
+
   // Filter Logic using unified helper
   const filteredDoctors = useMemo(() => {
     return filterDoctorsList(
@@ -95,40 +109,69 @@ export default function DoctorDirectory({
   }, [doctors, searchTerm, selectedSpecialty, selectedFacility, selectedDistrict, selectedDays, specialties, districts]);
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 bg-[#F8FAFC]">
-      <div className="mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div className="mx-auto max-w-7xl px-3 sm:px-6 lg:px-8 py-6 sm:py-8 bg-[#F8FAFC]">
+      
+      {/* Top Header Row */}
+      <div className="mb-5 sm:mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <span className="inline-flex rounded-lg bg-[#0284C7]/10 px-2 py-0.5 text-[10px] font-bold text-[#0284C7]">
             ● ফিল্টারিং প্যানেল
           </span>
-          <h1 className="text-xl font-extrabold text-slate-800 md:text-2xl mt-1.5">
-            ডাক্তার ডিরেক্টরি {selectedDistrict ? `(${selectedDistrict})` : ''}
+          <h1 className="text-lg sm:text-xl md:text-2xl font-extrabold text-slate-800 mt-1">
+            ডাক্তার ডিরেক্টরি {selectedDistrict && selectedDistrict !== 'সকল জেলা' ? `(${selectedDistrict})` : ''}
           </h1>
-          <p className="text-slate-400 font-bold text-xs mt-0.5">
-            ভেরিফাইড বিশেষজ্ঞ ডাক্তারদের তালিকা এবং সময়সূচী খুজে নিন।
+          <p className="text-slate-500 font-medium text-xs mt-0.5">
+            ভেরিফাইড বিশেষজ্ঞ ডাক্তারদের তালিকা এবং চেম্বার সময়সূচী খুঁজুন।
           </p>
         </div>
 
-        {/* Reset Filter Action Link */}
-        {(searchTerm || selectedSpecialty || selectedFacility || selectedDays.length > 0) && (
+        {/* Action Controls on Top */}
+        <div className="flex items-center gap-2">
+          {/* Mobile Filter Toggle Button */}
           <button
-            onClick={resetAllFilters}
-            className="flex items-center gap-1.5 self-start rounded-lg border border-rose-200 bg-rose-50 px-3.5 py-1.5 text-xs font-bold text-rose-600 transition hover:bg-rose-100/60 cursor-pointer"
-            id="reset-filters-btn"
+            type="button"
+            onClick={() => setIsMobileFilterOpen(!isMobileFilterOpen)}
+            className="lg:hidden flex items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-xs font-bold text-slate-700 shadow-2xs hover:bg-slate-50 transition cursor-pointer"
+            id="mobile-filter-toggle-btn"
           >
-            <RefreshCw className="h-3.5 w-3.5 animate-spin-once" />
-            <span>ফিল্টার রিসেট করুন</span>
+            <div className="flex items-center gap-1.5">
+              <SlidersHorizontal className="h-3.5 w-3.5 text-[#0284C7]" />
+              <span>ফিল্টার ({activeFiltersCount})</span>
+            </div>
+            {isMobileFilterOpen ? <ChevronUp className="h-3.5 w-3.5 text-slate-400" /> : <ChevronDown className="h-3.5 w-3.5 text-slate-400" />}
           </button>
-        )}
+
+          {/* Reset Filter Action Link */}
+          {activeFiltersCount > 0 && (
+            <button
+              onClick={resetAllFilters}
+              className="flex items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-600 transition hover:bg-rose-100/60 cursor-pointer"
+              id="reset-filters-btn"
+            >
+              <RefreshCw className="h-3.5 w-3.5" />
+              <span className="hidden xs:inline">রিসেট</span>
+            </button>
+          )}
+        </div>
       </div>
 
-      <div className="grid gap-8 lg:grid-cols-4">
-        {/* Left column: Sidebar Filters */}
-        <aside className="lg:col-span-1">
-          <div className="sticky top-24 rounded-xl border border-slate-200 bg-white p-4.5 shadow-sm space-y-4">
-            <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
-              <SlidersHorizontal className="h-4.5 w-4.5 text-[#0284C7]" />
-              <h2 className="text-sm font-bold text-slate-800">সার্চ ফিল্টারসমূহ</h2>
+      <div className="grid gap-6 lg:gap-8 lg:grid-cols-4">
+        {/* Left column: Sidebar Filters (Collapsible on mobile/tablet, sticky on lg+ desktop) */}
+        <aside className={`lg:col-span-1 ${isMobileFilterOpen ? 'block' : 'hidden lg:block'}`}>
+          <div className="sticky top-20 rounded-xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <SlidersHorizontal className="h-4 w-4 text-[#0284C7]" />
+                <h2 className="text-xs sm:text-sm font-bold text-slate-800">সার্চ ফিল্টারসমূহ</h2>
+              </div>
+              {activeFiltersCount > 0 && (
+                <button
+                  onClick={resetAllFilters}
+                  className="text-[10px] font-bold text-rose-600 hover:text-rose-700 underline cursor-pointer"
+                >
+                  সব মুছুন
+                </button>
+              )}
             </div>
 
             {/* District Selector in Sidebar */}
@@ -161,7 +204,7 @@ export default function DoctorDirectory({
               <div className="relative">
                 <input
                   type="text"
-                  placeholder="যেমন: আশরাফুল, A-45920"
+                  placeholder="যেমন: আফিফা, A-45920"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="w-full rounded-lg border border-slate-200 py-2 pl-8.5 pr-3.5 text-xs font-bold text-slate-800 focus:border-[#0284C7] focus:outline-none bg-white"
@@ -176,7 +219,7 @@ export default function DoctorDirectory({
               <label className="block text-[10px] font-bold text-[#0284C7] uppercase tracking-wider mb-1.5">
                 বিশেষজ্ঞ বিভাগ (Specialty)
               </label>
-              <div className="flex flex-col gap-1 max-h-56 overflow-y-auto pr-1">
+              <div className="flex flex-col gap-1 max-h-48 sm:max-h-56 overflow-y-auto pr-1">
                 <button
                   onClick={() => setSelectedSpecialty('')}
                   className={`flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-xs font-bold transition cursor-pointer ${
@@ -239,7 +282,7 @@ export default function DoctorDirectory({
               <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
                 রোগী দেখার দিন
               </label>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-2 gap-1.5">
                 {ALL_DAYS.map((day) => {
                   const isChecked = selectedDays.includes(day);
                   return (
@@ -266,10 +309,10 @@ export default function DoctorDirectory({
         </aside>
 
         {/* Right column: Doctor List Grid */}
-        <main className="lg:col-span-3">
+        <main className="lg:col-span-3 min-w-0">
           {/* Active Filter Indicators and Count */}
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-xs">
-            <div className="flex flex-wrap items-center gap-2">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white px-3.5 sm:px-4 py-3 shadow-xs">
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
               <span className="flex items-center gap-1.5 text-xs font-bold text-slate-700">
                 <Filter className="h-3.5 w-3.5 text-[#0284C7]" />
                 <span>ফলাফল:</span>
@@ -280,7 +323,7 @@ export default function DoctorDirectory({
 
               {/* Active Filter Chips */}
               {selectedDistrict && selectedDistrict !== 'সকল জেলা' && selectedDistrict !== 'সকল জেলা (All)' && selectedDistrict !== 'all' && (
-                <span className="inline-flex items-center gap-1 rounded-md bg-sky-50 px-2 py-1 text-[11px] font-bold text-sky-700 border border-sky-200">
+                <span className="inline-flex items-center gap-1 rounded-md bg-sky-50 px-2 py-0.5 text-[11px] font-bold text-sky-700 border border-sky-200">
                   <span>জেলা: {selectedDistrict}</span>
                   <button 
                     onClick={() => setSelectedDistrict?.('সকল জেলা')}
@@ -293,7 +336,7 @@ export default function DoctorDirectory({
               )}
 
               {selectedSpecialty && selectedSpecialty !== 'সকল বিশেষজ্ঞ' && selectedSpecialty !== 'all' && (
-                <span className="inline-flex items-center gap-1 rounded-md bg-blue-50 px-2 py-1 text-[11px] font-bold text-blue-700 border border-blue-200">
+                <span className="inline-flex items-center gap-1 rounded-md bg-blue-50 px-2 py-0.5 text-[11px] font-bold text-blue-700 border border-blue-200">
                   <span>বিশেষজ্ঞ: {selectedSpecialty}</span>
                   <button 
                     onClick={() => setSelectedSpecialty('')}
@@ -306,7 +349,7 @@ export default function DoctorDirectory({
               )}
 
               {selectedFacility && selectedFacility !== 'সকল হাসপাতাল/চেম্বার' && selectedFacility !== 'all' && (
-                <span className="inline-flex items-center gap-1 rounded-md bg-teal-50 px-2 py-1 text-[11px] font-bold text-teal-700 border border-teal-200">
+                <span className="inline-flex items-center gap-1 rounded-md bg-teal-50 px-2 py-0.5 text-[11px] font-bold text-teal-700 border border-teal-200">
                   <span>হাসপাতাল: {selectedFacility}</span>
                   <button 
                     onClick={() => setSelectedFacility('')}
@@ -319,8 +362,8 @@ export default function DoctorDirectory({
               )}
 
               {searchTerm && (
-                <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-2 py-1 text-[11px] font-bold text-amber-800 border border-amber-200">
-                  <span>অনুসন্ধান: "{searchTerm}"</span>
+                <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-2 py-0.5 text-[11px] font-bold text-amber-800 border border-amber-200">
+                  <span>"{searchTerm}"</span>
                   <button 
                     onClick={() => setSearchTerm('')}
                     className="hover:text-amber-950 cursor-pointer ml-0.5"
@@ -332,7 +375,7 @@ export default function DoctorDirectory({
               )}
 
               {selectedDays.length > 0 && (
-                <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-1 text-[11px] font-bold text-emerald-700 border border-emerald-200">
+                <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-700 border border-emerald-200">
                   <span>দিন: {selectedDays.join(', ')}</span>
                   <button 
                     onClick={() => setSelectedDays([])}
@@ -346,12 +389,12 @@ export default function DoctorDirectory({
             </div>
 
             {/* Clear All Trigger */}
-            {(searchTerm || selectedSpecialty || selectedFacility || selectedDays.length > 0 || (selectedDistrict && selectedDistrict !== 'সকল জেলা' && selectedDistrict !== 'সকল জেলা (All)')) && (
+            {activeFiltersCount > 0 && (
               <button
                 onClick={resetAllFilters}
-                className="text-[11px] font-bold text-rose-600 hover:text-rose-700 hover:underline cursor-pointer"
+                className="text-[11px] font-bold text-rose-600 hover:text-rose-700 hover:underline cursor-pointer ml-auto"
               >
-                সব ফিল্টার মুছুন
+                সব মুছুন
               </button>
             )}
           </div>
@@ -359,19 +402,19 @@ export default function DoctorDirectory({
           {filteredDoctors.length === 0 ? (
             /* Clean Empty State UI */
             <div 
-              className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-white p-10 text-center shadow-sm"
+              className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-white p-8 sm:p-12 text-center shadow-xs"
               id="empty-state-container"
             >
               <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-slate-50 border border-slate-100 text-[#0284C7] mb-4">
                 <Search className="h-5 w-5 stroke-[1.5]" />
               </div>
-              <h3 className="text-xs font-bold text-slate-800">কোনো ডাক্তার পাওয়া যায়নি</h3>
-              <p className="mx-auto mt-2 max-w-sm text-[11px] text-slate-400 font-semibold leading-relaxed">
-                আপনার দেওয়া ফিল্টারের সাথে মিলে এমন কোনো ডাক্তার এই মুহুর্তে পাওয়া যায়নি। অনুগ্রহ করে অন্য কোনো বিশেষজ্ঞ ক্যাটাগরি বা জেলা সিলেক্ট করুন।
+              <h3 className="text-sm font-bold text-slate-800">কোনো ডাক্তার পাওয়া যায়নি</h3>
+              <p className="mx-auto mt-2 max-w-sm text-xs text-slate-500 font-semibold leading-relaxed">
+                আপনার দেওয়া ফিল্টারের সাথে মিলে এমন কোনো ডাক্তার এই মুহূর্তে পাওয়া যায়নি। অনুগ্রহ করে অন্য কোনো বিশেষজ্ঞ বিভাগ বা জেলা সিলেক্ট করুন।
               </p>
               <button
                 onClick={resetAllFilters}
-                className="mt-5 rounded-lg bg-[#0284C7] px-5 py-2 text-xs font-bold text-white transition hover:bg-[#0274af] cursor-pointer"
+                className="mt-5 rounded-lg bg-[#0284C7] px-5 py-2.5 text-xs font-bold text-white transition hover:bg-[#0274af] cursor-pointer shadow-xs"
                 id="empty-state-reset-btn"
               >
                 সকল ফিল্টার রিসেট করুন
@@ -379,7 +422,7 @@ export default function DoctorDirectory({
             </div>
           ) : (
             /* Doctor Cards Grid */
-            <div className="grid gap-6 sm:grid-cols-2">
+            <div className="grid gap-4 sm:gap-6 grid-cols-1 sm:grid-cols-2">
               {filteredDoctors.map((doc, idx) => (
                 <React.Fragment key={doc.id}>
                   <DoctorCard
@@ -409,3 +452,4 @@ export default function DoctorDirectory({
     </div>
   );
 }
+

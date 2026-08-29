@@ -5,13 +5,15 @@ import {
   CheckCircle, 
   Users, 
   Calendar, 
-  Layers 
+  Layers,
+  Menu
 } from 'lucide-react';
 
 interface AdminHeaderProps {
   pendingAppointmentsCount: number;
   doctorsCount: number;
   facilitiesCount: number;
+  onToggleMobileSidebar?: () => void;
 }
 
 const BANGLA_MONTHS = [
@@ -32,7 +34,8 @@ const toBanglaDigits = (num: string | number): string => {
 export default function AdminHeader({
   pendingAppointmentsCount,
   doctorsCount,
-  facilitiesCount
+  facilitiesCount,
+  onToggleMobileSidebar
 }: AdminHeaderProps) {
   const [time, setTime] = useState(new Date());
 
@@ -55,39 +58,51 @@ export default function AdminHeader({
   const minutes = time.getMinutes().toString().padStart(2, '0');
   const seconds = time.getSeconds().toString().padStart(2, '0');
 
-  const banglaTimeStr = `${ampm} ${toBanglaDigits(hours)}:${toBanglaDigits(minutes)}:${toBanglaDigits(seconds)}`;
+  const banglaTimeStr = `${ampm} ${toBanglaDigits(hours)}:${toBanglaDigits(minutes)}`;
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 w-full items-center justify-between border-b border-slate-200 bg-white px-6 shadow-xs">
+    <header className="sticky top-0 z-30 flex h-16 w-full items-center justify-between border-b border-slate-200 bg-white px-3 sm:px-6 shadow-xs">
       
-      {/* Live Running Date & Time Widget */}
-      <div className="flex items-center gap-4 text-xs font-semibold text-slate-600">
-        <div className="flex items-center gap-2 rounded-lg bg-slate-50 border border-slate-100 px-3.5 py-1.5 shadow-2xs">
+      {/* Mobile Toggle & Live Date/Time Widget */}
+      <div className="flex items-center gap-2 sm:gap-4 text-xs font-semibold text-slate-600 min-w-0">
+        {onToggleMobileSidebar && (
+          <button
+            onClick={onToggleMobileSidebar}
+            className="lg:hidden p-2 rounded-lg text-slate-600 hover:bg-slate-100 hover:text-slate-900 border border-slate-200 cursor-pointer shrink-0"
+            aria-label="Open sidebar"
+            id="admin-mobile-menu-toggle"
+          >
+            <Menu className="h-5 w-5" />
+          </button>
+        )}
+
+        <div className="hidden sm:flex items-center gap-2 rounded-lg bg-slate-50 border border-slate-100 px-3 py-1.5 shadow-2xs shrink-0">
           <Calendar className="h-4 w-4 text-[#0284C7]" />
-          <span className="font-extrabold text-slate-800">
-            {dayName}, {dateNum} {monthName} {yearNum}
+          <span className="font-extrabold text-slate-800 text-[11px] sm:text-xs">
+            {dayName}, {dateNum} {monthName}
           </span>
         </div>
 
-        <div className="flex items-center gap-2 rounded-lg bg-sky-50/50 border border-sky-100 px-3.5 py-1.5 shadow-2xs">
-          <Clock className="h-4 w-4 text-[#0284C7] animate-pulse" />
-          <span className="font-extrabold text-slate-800 font-mono tracking-wider">
+        <div className="flex items-center gap-1.5 sm:gap-2 rounded-lg bg-sky-50/50 border border-sky-100 px-2.5 sm:px-3.5 py-1.5 shadow-2xs shrink-0">
+          <Clock className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-[#0284C7] animate-pulse shrink-0" />
+          <span className="font-extrabold text-slate-800 font-mono tracking-wider text-[11px] sm:text-xs">
             {banglaTimeStr}
           </span>
         </div>
       </div>
 
       {/* System Status and Micro Stats */}
-      <div className="flex items-center gap-6">
+      <div className="flex items-center gap-2 sm:gap-6">
         
         {/* System Health Check Status Indicator */}
-        <div className="flex items-center gap-1.5 rounded-full bg-emerald-50 border border-emerald-100/60 px-3 py-1 text-[10px] font-extrabold text-emerald-700">
-          <CheckCircle className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-          <span>সার্ভার অন-লাইন (API Active)</span>
+        <div className="flex items-center gap-1.5 rounded-full bg-emerald-50 border border-emerald-100/60 px-2.5 sm:px-3 py-1 text-[9px] sm:text-[10px] font-extrabold text-emerald-700">
+          <CheckCircle className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-emerald-600 shrink-0" />
+          <span className="hidden xs:inline sm:inline">সার্ভার সক্রিয়</span>
+          <span className="xs:hidden sm:hidden">অন-লাইন</span>
         </div>
 
         {/* Compact Quick Stats Widget */}
-        <div className="hidden lg:flex items-center gap-3 border-l border-slate-200 pl-6">
+        <div className="hidden md:flex items-center gap-3 border-l border-slate-200 pl-4 sm:pl-6">
           <div className="flex items-center gap-2">
             <Users className="h-4 w-4 text-slate-400" />
             <div>
@@ -112,3 +127,4 @@ export default function AdminHeader({
     </header>
   );
 }
+

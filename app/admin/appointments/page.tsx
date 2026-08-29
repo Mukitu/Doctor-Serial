@@ -25,9 +25,11 @@ import {
   Eye,
   Hash
 } from 'lucide-react';
-import { supabase, isSupabaseConfigured } from '@/src/lib/supabase';
+import { supabase, isSupabaseConfigured, getDoctors } from '@/src/lib/supabase';
+import { INITIAL_DOCTORS } from '@/src/data/mockData';
 import { generateSmsText, getSmsUri, cleanPhone } from '@/lib/smsHelper';
 import ConfirmAppointmentModal from '@/components/admin/ConfirmAppointmentModal';
+import { Doctor } from '@/src/types';
 
 export interface DoctorFilterItem {
   id: string;
@@ -40,6 +42,7 @@ export default function AdminAppointmentsPage() {
   const [loading, setLoading] = useState<boolean>(true);
   const [appointments, setAppointments] = useState<any[]>([]);
   const [doctorsList, setDoctorsList] = useState<DoctorFilterItem[]>([]);
+  const [allDoctors, setAllDoctors] = useState<Doctor[]>(INITIAL_DOCTORS);
   const [actionError, setActionError] = useState<string>('');
 
   // Selected Modal Appointment
@@ -60,14 +63,107 @@ export default function AdminAppointmentsPage() {
     return d.toISOString().split('T')[0];
   }, []);
 
+  // Doctor & Chamber Resolver Helper
+  const resolveAppointmentDetails = useCallback((item: any) => {
+    const docId = item.doctor_id || item.doctorId || item.doctors?.id;
+    const docName = item.doctor_name || item.doctorName || item.doctors?.name;
+
+    const matchedDoc = allDoctors.find(d => 
+      (docId && (d.id === docId || d.id.split('::')[0] === String(docId).split('::')[0])) ||
+      (docName && d.name && (d.name.trim() === docName.trim() || d.name.includes(docName) || docName.includes(d.name)))
+    );
+
+    const matchedChamber = matchedDoc?.chambers?.find((c: any) => c.id === item.chamber_id || c.id === item.chamberId)
+      || matchedDoc?.chambers?.find((c: any) => c.facilityName && (item.facilityName || item.assigned_facility_name) && c.facilityName.includes(item.facilityName || item.assigned_facility_name))
+      || matchedDoc?.chambers?.[0];
+
+    const doctorName = 
+      item.doctors?.name || 
+      item.doctorName || 
+      item.doctor_name || 
+      matchedDoc?.name || 
+      'বিশেষজ্ঞ ডাক্তার';
+
+    const specialty = 
+      item.doctors?.specialties?.name_bn || 
+      item.doctorSpecialty || 
+      matchedDoc?.specialty || 
+      matchedDoc?.specialtyNameBn || 
+      'মেডিসিন';
+
+    const facilityName = 
+      item.assigned_facility_name || 
+      item.assignedFacilityName || 
+      item.chambers?.facilities?.name || 
+      item.facilities?.name || 
+      item.facilityName || 
+      item.facility_name || 
+      matchedChamber?.facilityName || 
+      matchedDoc?.facility || 
+      'হাসপাতাল/চেম্বার';
+
+    const roomNo = 
+      item.assigned_room_no || 
+      item.assignedRoomNo || 
+      item.chamberRoomNo || 
+      item.chambers?.room_no || 
+      matchedChamber?.roomNo || 
+      matchedDoc?.chamberRoomNo || 
+      '';
+
+    const floor = 
+      item.assigned_floor || 
+      item.assignedFloor || 
+      item.chamberFloor || 
+      item.chambers?.floor || 
+      matchedChamber?.floor || 
+      matchedDoc?.chamberFloor || 
+      '';
+
+    const building = 
+      item.assigned_building || 
+      item.assignedBuilding || 
+      item.chamberBuildingStand || 
+      item.chambers?.building_info || 
+      matchedChamber?.buildingStand || 
+      matchedDoc?.chamberBuildingStand || 
+      '';
+
+    const visitingTime = 
+      item.confirmed_visiting_time || 
+      item.confirmedVisitingTime || 
+      item.visitingTime || 
+      item.chambers?.visiting_time || 
+      matchedChamber?.visitingTime || 
+      matchedDoc?.visitingTime || 
+      '';
+
+    return {
+      matchedDoc,
+      doctorName,
+      specialty,
+      facilityName,
+      roomNo,
+      floor,
+      building,
+      visitingTime
+    };
+  }, [allDoctors]);
+
   // Fetch Data Query
   const fetchAppointmentsAndDoctors = useCallback(async () => {
     setLoading(true);
     setActionError('');
 
     try {
+      // 1. Fetch full doctors first to populate reference cache
+      const fullDocs = await getDoctors();
+      if (fullDocs && fullDocs.length > 0) {
+        setAllDoctors(fullDocs);
+      }
+
       if (isSupabaseConfigured && supabase) {
-        // 1. Fetch Deep Relational Appointments
+        // 2. Fetch Relational Appointments
         const { data: apptData, error: apptError } = await supabase
           .from('appointments')
           .select(`
@@ -109,19 +205,27 @@ export default function AdminAppointmentsPage() {
           setAppointments(apptData);
         }
 
-        // 2. Fetch Active Doctors List
+        // 3. Fetch Active Doctors List for filter dropdown
         const { data: docData } = await supabase
           .from('doctors')
           .select('id, name, specialties(name_bn)')
           .eq('is_active', true)
           .order('name', { ascending: true });
 
-        if (docData) {
+        if (docData && docData.length > 0) {
           setDoctorsList(
             docData.map((d: any) => ({
               id: d.id,
               name: d.name,
               specialtyName: d.specialties?.name_bn || ''
+            }))
+          );
+        } else if (fullDocs && fullDocs.length > 0) {
+          setDoctorsList(
+            fullDocs.map((d) => ({
+              id: d.id,
+              name: d.name,
+              specialtyName: d.specialtyNameBn || d.specialty || ''
             }))
           );
         }
@@ -134,11 +238,12 @@ export default function AdminAppointmentsPage() {
         const savedDocs = localStorage.getItem('sheba_doctors_v3');
         if (savedDocs) {
           const list = JSON.parse(savedDocs);
+          setAllDoctors(list);
           setDoctorsList(
             list.map((d: any) => ({
               id: d.id || d.doctorId,
               name: d.name,
-              specialtyName: d.specialty
+              specialtyName: d.specialty || d.specialtyNameBn || ''
             }))
           );
         }
@@ -514,43 +619,62 @@ export default function AdminAppointmentsPage() {
               </thead>
               <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
                 {filteredAppointments.map((item) => {
-                  const doctor = item.doctors || {};
-                  const chamber = item.chambers || {};
-                  const facility = chamber.facilities || item.facilities || {};
-
-                  const doctorName = doctor.name || item.doctorName || item.doctor_name || 'বিশেষজ্ঞ ডাক্তার';
-                  const specialty = doctor.specialties?.name_bn || item.doctorSpecialty || doctor.specialty || 'মেডিসিন';
+                  const resolved = resolveAppointmentDetails(item);
+                  const doctorName = resolved.doctorName;
+                  const specialty = resolved.specialty;
+                  const facilityName = resolved.facilityName;
+                  const roomNo = resolved.roomNo;
+                  const floor = resolved.floor;
+                  const building = resolved.building;
+                  const visitingTime = resolved.visitingTime;
 
                   const patientName = item.patient_name || item.patientName || 'রোগী';
                   const patientPhone = item.patient_mobile || item.patient_phone || item.patientMobile || '';
                   const patientAge = item.patient_age || item.patientAge || '';
 
                   const preferredDate = item.preferred_date || item.appointment_date || item.preferredDate || '';
-                  const facilityName = 
-                    item.assigned_facility_name || 
-                    facility.name || 
-                    item.facilityName || 
-                    item.facility_name || 
-                    'হাসপাতাল/চেম্বার';
-
-                  const roomNo = item.assigned_room_no || chamber.room_no || item.chamberRoomNo || '';
-                  const floor = item.assigned_floor || chamber.floor || item.chamberFloor || '';
                   const serialNo = item.serial_no || item.serialNo || '';
                   const isPending = item.status === 'Pending';
                   const isConfirmed = item.status === 'Confirmed';
                   const isCancelled = item.status === 'Cancelled' || item.status === 'Rejected';
 
-                  // Build SMS URI for quick SMS click
+                  // Build SMS URI for quick SMS click with full detailed template
                   const quickSmsText = generateSmsText({
                     patientName,
                     doctorName,
                     facilityName,
                     serialNo: serialNo || '০১',
                     roomNo,
-                    visitingTime: item.confirmed_visiting_time || chamber.visiting_time || item.visitingTime,
-                    date: preferredDate
+                    floor,
+                    building,
+                    visitingTime,
+                    date: preferredDate,
+                    specialInstructions: item.special_instructions || item.admin_notes || item.adminNotes
                   });
                   const quickSmsUri = getSmsUri(patientPhone, quickSmsText);
+
+                  // Prepare enriched appointment object to pass to confirmation modal
+                  const enrichedAppointment = {
+                    ...item,
+                    doctorName,
+                    doctor_name: doctorName,
+                    doctors: {
+                      id: item.doctor_id || item.doctorId,
+                      name: doctorName,
+                      degrees: item.doctors?.degrees || resolved.matchedDoc?.degrees || 'এমবিবিএস',
+                      specialties: { name_bn: specialty }
+                    },
+                    assignedFacilityName: facilityName,
+                    assigned_facility_name: facilityName,
+                    assignedRoomNo: roomNo,
+                    assigned_room_no: roomNo,
+                    assignedFloor: floor,
+                    assigned_floor: floor,
+                    assignedBuilding: building,
+                    assigned_building: building,
+                    confirmedVisitingTime: visitingTime,
+                    confirmed_visiting_time: visitingTime
+                  };
 
                   return (
                     <tr key={item.id} className="hover:bg-slate-50/80 transition">
@@ -592,10 +716,11 @@ export default function AdminAppointmentsPage() {
                           <Building2 className="h-3.5 w-3.5 text-slate-400 shrink-0" />
                           <span>{facilityName}</span>
                         </div>
-                        {(roomNo || floor) && (
-                          <div className="mt-1 text-[11px] text-slate-500 flex items-center gap-1.5">
-                            {roomNo && <span className="font-semibold text-slate-700">রুম: {roomNo}</span>}
-                            {floor && <span>({floor})</span>}
+                        {(roomNo || floor || building) && (
+                          <div className="mt-1 text-[11px] text-slate-600 flex items-center gap-1.5 flex-wrap">
+                            {roomNo && <span className="font-bold text-slate-800 bg-slate-100 px-1.5 py-0.5 rounded">রুম: {roomNo}</span>}
+                            {floor && <span>{floor}</span>}
+                            {building && <span className="text-slate-500">• {building}</span>}
                           </div>
                         )}
                         {serialNo && (
@@ -635,7 +760,7 @@ export default function AdminAppointmentsPage() {
                           {isPending && (
                             <button
                               type="button"
-                              onClick={() => setConfirmingAppointment(item)}
+                              onClick={() => setConfirmingAppointment(enrichedAppointment)}
                               className="inline-flex items-center gap-1 rounded-xl bg-sky-600 hover:bg-sky-700 px-3 py-1.5 text-xs font-bold text-white shadow-xs transition active:scale-95"
                             >
                               <CheckCircle2 className="h-3.5 w-3.5" />
@@ -656,7 +781,7 @@ export default function AdminAppointmentsPage() {
 
                               <button
                                 type="button"
-                                onClick={() => setConfirmingAppointment(item)}
+                                onClick={() => setConfirmingAppointment(enrichedAppointment)}
                                 className="inline-flex items-center gap-1 rounded-xl bg-slate-100 hover:bg-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition"
                                 title="সিরিয়াল আপডেট করুন"
                               >

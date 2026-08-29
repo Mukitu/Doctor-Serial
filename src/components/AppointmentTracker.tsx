@@ -17,21 +17,30 @@ import {
   ClipboardList,
   Stethoscope,
   Building,
+  Building2,
+  DoorOpen,
+  Layers,
+  MapPin,
   DollarSign
 } from 'lucide-react';
-import { Appointment } from '../types';
+import { Appointment, Doctor } from '../types';
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
+import { INITIAL_DOCTORS } from '../data/mockData';
 
 interface AppointmentTrackerProps {
   appointments: Appointment[];
+  doctors?: Doctor[];
 }
 
-export default function AppointmentTracker({ appointments }: AppointmentTrackerProps) {
+export default function AppointmentTracker({ appointments, doctors = [] }: AppointmentTrackerProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [searched, setSearched] = useState(false);
   const [results, setResults] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(false);
   const [validationError, setValidationError] = useState('');
+
+  // Combine loaded doctors and initial mock doctors for foolproof lookup
+  const allDoctors = doctors && doctors.length > 0 ? doctors : INITIAL_DOCTORS;
 
   // Calculate local today string (YYYY-MM-DD)
   const getTodayStr = () => {
@@ -97,31 +106,51 @@ export default function AppointmentTracker({ appointments }: AppointmentTrackerP
           const spec = doc?.specialties;
           const ch = app.chambers;
           const fac = ch?.facilities;
-          const phone = app.patient_phone || '';
+          const phone = app.patient_phone || app.patient_mobile || '';
+
+          // Look up doctor in allDoctors list if relations are incomplete
+          const docId = app.doctor_id || app.doctorId;
+          const matchedDoc = allDoctors.find(d => 
+            (docId && (d.id === docId || d.id.split('::')[0] === String(docId).split('::')[0])) ||
+            (app.doctor_name && d.name && (d.name.trim() === app.doctor_name.trim() || d.name.includes(app.doctor_name)))
+          );
+
+          const matchedChamber = matchedDoc?.chambers?.find((c: any) => c.id === app.chamber_id) || matchedDoc?.chambers?.[0];
+
+          const resolvedDoctorName = doc?.name || app.doctor_name || app.doctorName || matchedDoc?.name || 'বিশেষজ্ঞ চিকিৎসক';
+          const resolvedDegrees = doc?.degrees || app.doctorDegrees || matchedDoc?.degrees || 'এমবিবিএস';
+          const resolvedSpecialty = spec?.name_bn || app.doctorSpecialty || matchedDoc?.specialty || matchedDoc?.specialtyNameBn || 'মেডিসিন';
+          const resolvedFacility = app.assigned_facility_name || fac?.name || app.facilityName || matchedChamber?.facilityName || matchedDoc?.facility || 'হাসপাতাল/চেম্বার';
+          const resolvedAddress = fac?.area_address || app.facilityAddress || matchedChamber?.facilityAddress || matchedDoc?.chamberAddress || '';
+          const resolvedRoom = app.assigned_room_no || ch?.room_no || app.chamberRoomNo || matchedChamber?.roomNo || matchedDoc?.chamberRoomNo || '';
+          const resolvedFloor = app.assigned_floor || ch?.floor || app.chamberFloor || matchedChamber?.floor || matchedDoc?.chamberFloor || '';
+          const resolvedBuilding = app.assigned_building || ch?.building_stand || app.chamberBuildingStand || matchedChamber?.buildingStand || matchedDoc?.chamberBuildingStand || '';
+          const resolvedVisitingTime = app.confirmed_visiting_time || ch?.visiting_time || app.visitingTime || matchedChamber?.visitingTime || matchedDoc?.visitingTime || '';
+
           return {
             id: app.booking_code || app.id,
-            doctorId: app.doctor_id,
-            doctorName: doc?.name || 'Unknown Doctor',
-            doctorDegrees: doc?.degrees || '',
-            doctorSpecialty: spec?.name_bn || '',
-            chamberId: app.chamber_id,
-            facilityName: fac?.name || '',
-            facilityAddress: fac?.area_address || '',
-            patientName: app.patient_name,
-            patientAge: app.patient_age,
+            doctorId: app.doctor_id || app.doctorId,
+            doctorName: resolvedDoctorName,
+            doctorDegrees: resolvedDegrees,
+            doctorSpecialty: resolvedSpecialty,
+            chamberId: app.chamber_id || app.chamberId,
+            facilityName: resolvedFacility,
+            facilityAddress: resolvedAddress,
+            patientName: app.patient_name || app.patientName,
+            patientAge: app.patient_age || app.patientAge,
             patientPhone: phone,
             patientMobile: phone,
-            preferredDate: app.preferred_date,
+            preferredDate: app.preferred_date || app.preferredDate,
             status: app.status as Appointment['status'],
-            serialNo: app.serial_no || undefined,
-            assignedRoomNo: app.assigned_room_no || ch?.room_no || undefined,
-            assignedFloor: app.assigned_floor || ch?.floor || undefined,
-            assignedBuilding: app.assigned_building || ch?.building_stand || undefined,
-            confirmedVisitingTime: app.confirmed_visiting_time || ch?.visiting_time || undefined,
-            rejectionReason: app.rejection_reason || undefined,
-            adminNotes: app.admin_notes || undefined,
-            createdAt: app.created_at,
-            updatedAt: app.updated_at
+            serialNo: app.serial_no || app.serialNo || undefined,
+            assignedRoomNo: resolvedRoom || undefined,
+            assignedFloor: resolvedFloor || undefined,
+            assignedBuilding: resolvedBuilding || undefined,
+            confirmedVisitingTime: resolvedVisitingTime || undefined,
+            rejectionReason: app.rejection_reason || app.rejectionReason || undefined,
+            adminNotes: app.admin_notes || app.special_instructions || app.adminNotes || undefined,
+            createdAt: app.created_at || app.createdAt,
+            updatedAt: app.updated_at || app.updatedAt
           };
         });
 
@@ -144,9 +173,34 @@ export default function AppointmentTracker({ appointments }: AppointmentTrackerP
     const found = appointments.filter(
       (app) => app.patientMobile === phoneNum || app.patientPhone === phoneNum
     );
+    
+    // Enrich local results with complete doctor & location data
+    const enriched = found.map(app => {
+      const docId = app.doctorId;
+      const matchedDoc = allDoctors.find(d => 
+        (docId && (d.id === docId || d.id.split('::')[0] === String(docId).split('::')[0])) ||
+        (app.doctorName && d.name && (d.name.trim() === app.doctorName.trim() || d.name.includes(app.doctorName)))
+      );
+
+      const matchedChamber = matchedDoc?.chambers?.find((c: any) => c.id === app.chamberId) || matchedDoc?.chambers?.[0];
+
+      return {
+        ...app,
+        doctorName: app.doctorName || matchedDoc?.name || 'বিশেষজ্ঞ চিকিৎসক',
+        doctorDegrees: app.doctorDegrees || matchedDoc?.degrees || 'এমবিবিএস',
+        doctorSpecialty: app.doctorSpecialty || matchedDoc?.specialty || 'মেডিসিন',
+        facilityName: app.assignedFacilityName || app.facilityName || matchedChamber?.facilityName || matchedDoc?.facility || 'হাসপাতাল/চেম্বার',
+        facilityAddress: app.facilityAddress || matchedChamber?.facilityAddress || matchedDoc?.chamberAddress || '',
+        assignedRoomNo: app.assignedRoomNo || app.chamberRoomNo || matchedChamber?.roomNo || matchedDoc?.chamberRoomNo,
+        assignedFloor: app.assignedFloor || app.chamberFloor || matchedChamber?.floor || matchedDoc?.chamberFloor,
+        assignedBuilding: app.assignedBuilding || app.chamberBuildingStand || matchedChamber?.buildingStand || matchedDoc?.chamberBuildingStand,
+        confirmedVisitingTime: app.confirmedVisitingTime || app.visitingTime || matchedChamber?.visitingTime || matchedDoc?.visitingTime
+      };
+    });
+
     // Sort by date newest first
-    found.sort((a, b) => b.preferredDate.localeCompare(a.preferredDate));
-    setResults(found);
+    enriched.sort((a, b) => b.preferredDate.localeCompare(a.preferredDate));
+    setResults(enriched);
   };
 
   // Helper to determine the lifecycle status of an appointment
@@ -366,44 +420,56 @@ export default function AppointmentTracker({ appointments }: AppointmentTrackerP
                             
                             {/* If Active / Confirmed */}
                             {lifecycle.type === 'active' && (
-                              <div className="rounded-lg bg-emerald-50/50 border border-emerald-200 p-4 space-y-3 shadow-xs">
-                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 border-b border-emerald-150 pb-3 text-center">
-                                  <div className="p-2.5 rounded-lg bg-white border border-emerald-200 shadow-2xs">
-                                    <span className="text-[9px] font-extrabold text-emerald-600 uppercase tracking-wider block">কনফার্মড সিরিয়াল</span>
-                                    <p className="text-lg font-black text-emerald-800">#{app.serialNo || 'নির্ধারিত'}</p>
+                              <div className="rounded-xl bg-gradient-to-br from-emerald-50/90 to-white border border-emerald-200 p-4 sm:p-5 space-y-4 shadow-xs">
+                                {/* Metric Grid */}
+                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                                  <div className="p-3 rounded-xl bg-white border border-emerald-200 shadow-2xs text-center flex flex-col justify-center">
+                                    <span className="text-[10px] font-extrabold text-emerald-600 uppercase tracking-wider block">কনফার্মড সিরিয়াল</span>
+                                    <p className="text-xl font-black text-emerald-800 mt-0.5">#{app.serialNo || '০১'}</p>
                                   </div>
-                                  <div className="p-2.5 rounded-lg bg-emerald-100/90 border border-emerald-300 shadow-2xs">
-                                    <span className="text-[9px] font-black text-emerald-900 uppercase tracking-wider block">ডাক্তার বসার রুম</span>
-                                    <p className="text-base font-black text-emerald-950">{app.assignedRoomNo || '৩০২'}</p>
+                                  <div className="p-3 rounded-xl bg-emerald-100/90 border border-emerald-300 shadow-2xs text-center flex flex-col justify-center">
+                                    <span className="text-[10px] font-black text-emerald-900 uppercase tracking-wider block">ডাক্তার বসার রুম</span>
+                                    <p className="text-base font-black text-emerald-950 mt-0.5">রুম: {app.assignedRoomNo || '৩০২'}</p>
                                   </div>
-                                  <div className="p-2.5 rounded-lg bg-white border border-emerald-200 shadow-2xs">
-                                    <span className="text-[9px] font-extrabold text-emerald-600 uppercase tracking-wider block">ফ্লোর / তলা</span>
+                                  <div className="col-span-2 sm:col-span-1 p-3 rounded-xl bg-white border border-emerald-200 shadow-2xs text-center flex flex-col justify-center">
+                                    <span className="text-[10px] font-extrabold text-emerald-600 uppercase tracking-wider block">ফ্লোর / তলা</span>
                                     <p className="text-xs font-black text-emerald-800 mt-1">{app.assignedFloor || '৩য় তলা'}</p>
                                   </div>
-                                  <div className="p-2.5 rounded-lg bg-white border border-emerald-200 shadow-2xs">
-                                    <span className="text-[9px] font-extrabold text-emerald-600 uppercase tracking-wider block">বিল্ডিং / স্থান</span>
-                                    <p className="text-[11px] font-black text-emerald-800 mt-1 truncate" title={app.assignedBuilding || 'মেইন ভবন'}>
-                                      {app.assignedBuilding || 'মেইন ভবন'}
+                                </div>
+
+                                {/* Building / Location Dedicated Card - Full Display, No Cutoffs */}
+                                <div className="rounded-xl bg-white border border-emerald-200 p-3.5 shadow-2xs flex items-start gap-3">
+                                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700 font-bold mt-0.5">
+                                    <Building2 className="h-4 w-4" />
+                                  </div>
+                                  <div className="min-w-0 flex-1">
+                                    <span className="text-[10px] font-black text-emerald-700 uppercase tracking-wider block">
+                                      বিল্ডিং ও চেম্বারের সুনির্দিষ্ট অবস্থান
+                                    </span>
+                                    <p className="text-xs sm:text-sm font-black text-slate-800 mt-0.5 leading-snug break-words">
+                                      {app.assignedBuilding || app.chamberBuildingStand || 'মেইন ভবন / ওপিডি ব্লক'}
                                     </p>
                                   </div>
                                 </div>
-                                <div className="space-y-1.5 text-[11px] text-slate-700 font-bold">
-                                  <p className="flex justify-between border-b border-emerald-100 pb-1">
-                                    <span className="text-slate-500">রোগীর নাম:</span>
-                                    <span className="text-slate-900 font-extrabold">{app.patientName} ({app.patientAge} বছর)</span>
+
+                                {/* Patient & Schedule Details List */}
+                                <div className="space-y-2 text-xs text-slate-700 font-bold bg-white/70 rounded-xl p-3.5 border border-emerald-100 divide-y divide-emerald-50">
+                                  <p className="flex justify-between pb-1.5">
+                                    <span className="text-slate-500 font-medium">রোগীর নাম:</span>
+                                    <span className="text-slate-900 font-extrabold">{app.patientName} {app.patientAge ? `(${app.patientAge} বছর)` : ''}</span>
                                   </p>
-                                  <p className="flex justify-between border-b border-emerald-100 pb-1">
-                                    <span className="text-slate-500">ভিজিটের সময়সূচী:</span>
-                                    <span className="text-indigo-700 font-extrabold">{app.confirmedVisitingTime || 'চেম্বার সময়সূচী অনুযায়ী'}</span>
+                                  <p className="flex justify-between py-1.5">
+                                    <span className="text-slate-500 font-medium">ভিজিটের সময়সূচী:</span>
+                                    <span className="text-indigo-700 font-extrabold">{app.confirmedVisitingTime || 'চেম্বার সময় অনুযায়ী'}</span>
                                   </p>
-                                  <p className="flex justify-between text-[#0D9488]">
-                                    <span>সিরিয়ালের তারিখ:</span>
+                                  <p className="flex justify-between py-1.5 text-[#0D9488]">
+                                    <span className="text-slate-500 font-medium">সিরিয়ালের তারিখ:</span>
                                     <span className="font-extrabold">{app.preferredDate}</span>
                                   </p>
                                   {app.adminNotes && (
-                                    <p className="p-2 rounded bg-white/90 border border-emerald-200 text-[10px] text-slate-700 font-semibold mt-1">
-                                      <strong className="text-emerald-800">বিশেষ দ্রষ্টব্য:</strong> {app.adminNotes}
-                                    </p>
+                                    <div className="pt-2 text-[11px] text-slate-700 font-normal">
+                                      <span className="text-emerald-800 font-extrabold">বিশেষ নির্দেশনা:</span> {app.adminNotes}
+                                    </div>
                                   )}
                                 </div>
                               </div>

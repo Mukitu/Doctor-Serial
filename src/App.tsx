@@ -701,7 +701,7 @@ export default function App() {
         )}
 
         {activeTab === 'track' && (
-          <AppointmentTracker appointments={appointments} />
+          <AppointmentTracker appointments={appointments} doctors={doctors} />
         )}
 
         {activeTab === 'about' && (
