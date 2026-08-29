@@ -197,9 +197,11 @@ export async function getSpecialties(): Promise<Specialty[]> {
       id: s.id,
       nameBn: s.name_bn,
       nameEn: s.name_en,
-      iconName: s.icon_name,
-      isActive: s.is_active,
-      displayOrder: s.display_order
+      slug: s.slug || (s.name_en ? s.name_en.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '') : ''),
+      iconUrl: s.icon_url || s.icon_name || '',
+      iconName: s.icon_name || '',
+      isActive: s.is_active !== false,
+      displayOrder: s.display_order ?? 1
     }));
     localStorage.setItem('sheba_specialties', JSON.stringify(mapped));
     return mapped;
@@ -211,10 +213,53 @@ export async function getSpecialties(): Promise<Specialty[]> {
   }
 }
 
+export async function uploadSpecialtyIcon(file: File): Promise<string> {
+  if (!file) return '';
+  if (!isSupabaseConfigured || !supabase) {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.readAsDataURL(file);
+    });
+  }
+
+  try {
+    const fileExt = file.name.split('.').pop() || 'png';
+    const fileName = `specialty_${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${fileExt}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('specialty-icons')
+      .upload(fileName, file, { upsert: true, cacheControl: '3600' });
+
+    if (uploadError) {
+      console.warn('Supabase storage upload error, falling back to base64:', uploadError.message);
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.readAsDataURL(file);
+      });
+    }
+
+    const { data } = supabase.storage
+      .from('specialty-icons')
+      .getPublicUrl(fileName);
+
+    return data?.publicUrl || '';
+  } catch (err) {
+    console.error('Error in uploadSpecialtyIcon:', err);
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.readAsDataURL(file);
+    });
+  }
+}
+
 export async function addSpecialty(spec: Omit<Specialty, 'id'>): Promise<void> {
   const specialties = await getSpecialties();
   const newId = `spec-${Date.now()}`;
-  const newItem: Specialty = { ...spec, id: newId };
+  const generatedSlug = spec.slug || (spec.nameEn ? spec.nameEn.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '') : 'specialty');
+  const newItem: Specialty = { ...spec, id: newId, slug: generatedSlug };
 
   if (!isSupabaseConfigured || !supabase) {
     localStorage.setItem('sheba_specialties', JSON.stringify([...specialties, newItem]));
@@ -228,9 +273,11 @@ export async function addSpecialty(spec: Omit<Specialty, 'id'>): Promise<void> {
         id: crypto.randomUUID(),
         name_bn: spec.nameBn,
         name_en: spec.nameEn,
-        icon_name: spec.iconName,
-        display_order: spec.displayOrder,
-        is_active: spec.isActive
+        slug: generatedSlug,
+        icon_url: spec.iconUrl || spec.iconName || '',
+        icon_name: spec.iconName || '',
+        display_order: spec.displayOrder || 1,
+        is_active: spec.isActive !== false
       });
     if (error) throw error;
   } catch (err) {
@@ -241,8 +288,10 @@ export async function addSpecialty(spec: Omit<Specialty, 'id'>): Promise<void> {
 
 export async function updateSpecialty(spec: Specialty): Promise<void> {
   const specialties = await getSpecialties();
+  const generatedSlug = spec.slug || (spec.nameEn ? spec.nameEn.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '') : 'specialty');
+  
   if (!isSupabaseConfigured || !supabase) {
-    const updated = specialties.map(s => s.id === spec.id ? spec : s);
+    const updated = specialties.map(s => s.id === spec.id ? { ...spec, slug: generatedSlug } : s);
     localStorage.setItem('sheba_specialties', JSON.stringify(updated));
     return;
   }
@@ -253,9 +302,12 @@ export async function updateSpecialty(spec: Specialty): Promise<void> {
       .update({
         name_bn: spec.nameBn,
         name_en: spec.nameEn,
-        icon_name: spec.iconName,
-        display_order: spec.displayOrder,
-        is_active: spec.isActive
+        slug: generatedSlug,
+        icon_url: spec.iconUrl || spec.iconName || '',
+        icon_name: spec.iconName || '',
+        display_order: spec.displayOrder || 1,
+        is_active: spec.isActive !== false,
+        updated_at: new Date().toISOString()
       })
       .eq('id', spec.id);
     if (error) throw error;
@@ -1179,6 +1231,11 @@ export async function addAppointment(app: Appointment): Promise<void> {
         patient_age: app.patientAge,
         patient_phone: phone,
         preferred_date: app.preferredDate,
+        assigned_facility_name: app.assignedFacilityName || app.facilityName,
+        assigned_room_no: app.assignedRoomNo || app.chamberRoomNo,
+        assigned_floor: app.assignedFloor || app.chamberFloor,
+        assigned_building: app.assignedBuilding || app.chamberBuildingStand,
+        confirmed_visiting_time: app.confirmedVisitingTime || app.visitingTime,
         status: 'Pending'
       });
 

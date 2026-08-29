@@ -1,515 +1,705 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { 
-  Check, 
-  X, 
-  Clock, 
-  MapPin, 
-  User, 
-  Phone, 
   Calendar, 
-  Building2, 
   Search, 
-  CheckCircle, 
+  RotateCcw, 
+  CheckCircle2, 
+  Clock, 
+  XCircle, 
+  Users, 
+  Phone, 
+  Send, 
+  Building2, 
+  DoorOpen, 
+  Layers, 
+  User, 
+  Trash2, 
+  Filter, 
+  Check, 
+  FileText, 
   AlertCircle,
+  Loader2,
   RefreshCw,
-  FileText
+  Eye,
+  Hash
 } from 'lucide-react';
-import { supabase, isSupabaseConfigured, getAppointments, confirmAppointment } from '../../../src/lib/supabase';
-import { Appointment } from '../../../src/types';
+import { supabase, isSupabaseConfigured } from '@/src/lib/supabase';
+import { generateSmsText, getSmsUri, cleanPhone } from '@/lib/smsHelper';
+import ConfirmAppointmentModal from '@/components/admin/ConfirmAppointmentModal';
+
+export interface DoctorFilterItem {
+  id: string;
+  name: string;
+  specialtyName?: string;
+}
 
 export default function AdminAppointmentsPage() {
+  // Loading & State
+  const [loading, setLoading] = useState<boolean>(true);
   const [appointments, setAppointments] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filterStatus, setFilterStatus] = useState<string>('All');
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [doctorsList, setDoctorsList] = useState<DoctorFilterItem[]>([]);
+  const [actionError, setActionError] = useState<string>('');
 
-  // Confirmation modal states
-  const [confirmingApp, setConfirmingApp] = useState<any | null>(null);
-  const [confFacilityName, setConfFacilityName] = useState('');
-  const [confSerialNo, setConfSerialNo] = useState('');
-  const [confRoomNo, setConfRoomNo] = useState('');
-  const [confFloor, setConfFloor] = useState('');
-  const [confBuilding, setConfBuilding] = useState('');
-  const [confVisitingTime, setConfVisitingTime] = useState('');
-  const [confAdminNotes, setConfAdminNotes] = useState('');
-  const [confSubmitting, setConfSubmitting] = useState(false);
+  // Selected Modal Appointment
+  const [confirmingAppointment, setConfirmingAppointment] = useState<any | null>(null);
+  const [viewingSlipAppointment, setViewingSlipAppointment] = useState<any | null>(null);
 
-  useEffect(() => {
-    loadAppointments();
+  // Filters State
+  const [dateFilter, setDateFilter] = useState<string>(''); // YYYY-MM-DD or empty
+  const [selectedDoctorId, setSelectedDoctorId] = useState<string>('ALL');
+  const [statusTab, setStatusTab] = useState<'ALL' | 'Pending' | 'Confirmed' | 'Cancelled'>('ALL');
+  const [searchQuery, setSearchQuery] = useState<string>('');
+
+  // Get Today and Tomorrow formatted YYYY-MM-DD
+  const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
+  const tomorrowStr = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    return d.toISOString().split('T')[0];
   }, []);
 
-  const loadAppointments = async () => {
+  // Fetch Data Query
+  const fetchAppointmentsAndDoctors = useCallback(async () => {
     setLoading(true);
-    try {
-      if (!isSupabaseConfigured || !supabase) {
-        const localApps = await getAppointments();
-        setAppointments(localApps);
-        setLoading(false);
-        return;
-      }
+    setActionError('');
 
-      const { data, error } = await supabase
-        .from('appointments')
-        .select(`
-          *,
-          doctors:doctor_id (
-            id,
-            name,
-            degrees,
-            specialty_id,
-            specialties (name_bn)
-          ),
-          chambers:chamber_id (
-            id,
-            room_no,
-            floor,
-            building_info,
-            visiting_time,
-            fee_new,
-            facilities:facility_id (
+    try {
+      if (isSupabaseConfigured && supabase) {
+        // 1. Fetch Deep Relational Appointments
+        const { data: apptData, error: apptError } = await supabase
+          .from('appointments')
+          .select(`
+            *,
+            doctors (
               id,
               name,
-              area_address
+              degrees,
+              specialty_id,
+              specialties (
+                name_bn
+              )
+            ),
+            chambers (
+              id,
+              room_no,
+              floor,
+              building_info,
+              visiting_time,
+              facilities (
+                id,
+                name,
+                area_address
+              )
             )
-          )
-        `)
-        .order('created_at', { ascending: false });
+          `)
+          .order('created_at', { ascending: false });
 
-      if (error) throw error;
+        if (apptError) {
+          console.error('[Supabase Fetch Appointments Error]:', apptError);
+          // Fallback to simple select if deep join throws
+          const { data: fallbackData } = await supabase
+            .from('appointments')
+            .select('*')
+            .order('created_at', { ascending: false });
+          
+          if (fallbackData) setAppointments(fallbackData);
+        } else if (apptData) {
+          setAppointments(apptData);
+        }
 
-      if (data) {
-        setAppointments(data);
+        // 2. Fetch Active Doctors List
+        const { data: docData } = await supabase
+          .from('doctors')
+          .select('id, name, specialties(name_bn)')
+          .eq('is_active', true)
+          .order('name', { ascending: true });
+
+        if (docData) {
+          setDoctorsList(
+            docData.map((d: any) => ({
+              id: d.id,
+              name: d.name,
+              specialtyName: d.specialties?.name_bn || ''
+            }))
+          );
+        }
       } else {
-        const fallback = await getAppointments();
-        setAppointments(fallback);
+        // LocalStorage Fallback
+        const saved = localStorage.getItem('sheba_appointments_v3');
+        if (saved) {
+          setAppointments(JSON.parse(saved));
+        }
+        const savedDocs = localStorage.getItem('sheba_doctors_v3');
+        if (savedDocs) {
+          const list = JSON.parse(savedDocs);
+          setDoctorsList(
+            list.map((d: any) => ({
+              id: d.id || d.doctorId,
+              name: d.name,
+              specialtyName: d.specialty
+            }))
+          );
+        }
       }
-    } catch (err) {
-      console.error('Error fetching appointments with Supabase query:', err);
-      const fallback = await getAppointments();
-      setAppointments(fallback);
+    } catch (err: any) {
+      console.error('Error fetching admin appointments:', err);
+      setActionError('ডেটা লোড করতে সমস্যা দেখা দিয়েছে।');
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  useEffect(() => {
+    fetchAppointmentsAndDoctors();
+  }, [fetchAppointmentsAndDoctors]);
+
+  // Reset Filters
+  const handleResetFilters = () => {
+    setDateFilter('');
+    setSelectedDoctorId('ALL');
+    setStatusTab('ALL');
+    setSearchQuery('');
   };
 
-  const showToast = (msg: string) => {
-    setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 3500);
-  };
+  // Top Real-time Stat Badges Calculations
+  const stats = useMemo(() => {
+    const todayCount = appointments.filter((a) => {
+      const pDate = a.preferred_date || a.appointment_date || a.preferredDate || '';
+      return pDate === todayStr;
+    }).length;
 
-  const handleOpenConfirmModal = (app: any) => {
-    setConfirmingApp(app);
+    const pendingCount = appointments.filter((a) => a.status === 'Pending').length;
+    const confirmedCount = appointments.filter((a) => a.status === 'Confirmed').length;
+    const totalCount = appointments.length;
 
-    // Extract chamber details from nested relation or direct attributes
-    const ch = app.chambers || {};
-    const fac = ch.facilities || {};
-    const doc = app.doctors || {};
+    return { todayCount, pendingCount, confirmedCount, totalCount };
+  }, [appointments, todayStr]);
 
-    const facilityName = app.assigned_facility_name || fac.name || app.facilityName || doc.facility || 'পপুলার ডায়াগনস্টিক সেন্টার, রাজশাহী';
+  // Filtered Appointments
+  const filteredAppointments = useMemo(() => {
+    return appointments.filter((item) => {
+      // 1. Date Filter
+      if (dateFilter) {
+        const itemDate = item.preferred_date || item.appointment_date || item.preferredDate || '';
+        if (itemDate !== dateFilter) return false;
+      }
 
-    // Auto calculate serial number for that date
-    const sameDateConfirmed = appointments.filter((a: any) => 
-      (a.doctor_id === app.doctor_id || a.doctorId === app.doctorId) && 
-      (a.preferred_date === app.preferred_date || a.preferredDate === app.preferredDate) &&
-      a.status === 'Confirmed'
-    ).length;
-    const nextSerial = String(sameDateConfirmed + 1).padStart(2, '0');
+      // 2. Doctor Filter
+      if (selectedDoctorId !== 'ALL') {
+        const docId = item.doctor_id || item.doctorId || item.doctors?.id || '';
+        if (docId !== selectedDoctorId) return false;
+      }
 
-    setConfFacilityName(facilityName);
-    setConfSerialNo(app.serial_no || app.serialNo || nextSerial);
-    setConfRoomNo(app.assigned_room_no || app.assignedRoomNo || ch.room_no || app.chamberRoomNo || '১০১');
-    setConfFloor(app.assigned_floor || app.assignedFloor || ch.floor || app.chamberFloor || '১ম তলা');
-    setConfBuilding(app.assigned_building || app.assignedBuilding || ch.building_info || app.chamberBuildingStand || 'প্রধান ভবন, লিফট-১');
-    setConfVisitingTime(app.confirmed_visiting_time || app.confirmedVisitingTime || ch.visiting_time || app.visitingTime || 'বিকাল ৫:০০ - রাত ৮:৩০');
-    setConfAdminNotes(app.special_instructions || app.admin_notes || app.adminNotes || '');
-  };
+      // 3. Status Tab Filter
+      if (statusTab !== 'ALL') {
+        if (item.status !== statusTab) return false;
+      }
 
-  const handleConfirmSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!confirmingApp) return;
+      // 4. Live Search Filter (Patient Name or Mobile)
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
+        const patientName = (item.patient_name || item.patientName || '').toLowerCase();
+        const patientPhone = (item.patient_mobile || item.patient_phone || item.patientMobile || '').toLowerCase();
+        const doctorName = (item.doctors?.name || item.doctorName || '').toLowerCase();
+        
+        const matchesName = patientName.includes(q);
+        const matchesPhone = patientPhone.includes(q);
+        const matchesDoctor = doctorName.includes(q);
 
-    setConfSubmitting(true);
+        if (!matchesName && !matchesPhone && !matchesDoctor) return false;
+      }
+
+      return true;
+    });
+  }, [appointments, dateFilter, selectedDoctorId, statusTab, searchQuery]);
+
+  // Delete / Cancel Appointment
+  const handleDelete = async (id: string) => {
+    if (!window.confirm('আপনি কি নিশ্চিত যে এই সিরিয়ালটি বাতিল/মুছে ফেলতে চান?')) return;
+
     try {
-      const bookingCode = confirmingApp.booking_code || confirmingApp.id;
+      if (isSupabaseConfigured && supabase) {
+        const { error } = await supabase.from('appointments').delete().eq('id', id);
+        if (error) throw error;
+      }
 
-      await confirmAppointment({
-        bookingCode,
-        serialNo: confSerialNo.trim(),
-        assignedRoomNo: confRoomNo.trim(),
-        assignedFloor: confFloor.trim(),
-        assignedBuilding: confBuilding.trim(),
-        confirmedVisitingTime: confVisitingTime.trim(),
-        assignedFacilityName: confFacilityName.trim(),
-        specialInstructions: confAdminNotes.trim(),
-        adminNotes: confAdminNotes.trim() || undefined
-      });
-
-      showToast('সিরিয়াল ও রুম নম্বর সফলভাবে অনুমোদিত হয়েছে!');
-      setConfirmingApp(null);
-      loadAppointments();
+      // LocalStorage update
+      const updated = appointments.filter((a) => a.id !== id);
+      setAppointments(updated);
+      localStorage.setItem('sheba_appointments_v3', JSON.stringify(updated));
     } catch (err: any) {
-      console.error('Confirmation error:', err);
-      showToast(err.message || 'সিরিয়াল অনুমোদন করা সম্ভব হয়নি');
-    } finally {
-      setConfSubmitting(false);
+      alert('বাতিল করতে সমস্যা হয়েছে: ' + (err?.message || ''));
     }
   };
 
-  const filtered = appointments.filter((app) => {
-    const patientName = app.patient_name || app.patientName || '';
-    const patientPhone = app.patient_phone || app.patientMobile || app.patientPhone || '';
-    const bookingCode = app.booking_code || app.id || '';
-    const status = app.status || 'Pending';
-
-    const matchesSearch = 
-      patientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      patientPhone.includes(searchTerm) ||
-      bookingCode.toLowerCase().includes(searchTerm.toLowerCase());
-
-    const matchesStatus = filterStatus === 'All' || status === filterStatus;
-
-    return matchesSearch && matchesStatus;
-  });
-
   return (
-    <div className="min-h-screen bg-slate-50 p-4 sm:p-6 lg:p-8 font-sans">
-      {toastMessage && (
-        <div className="fixed bottom-5 right-5 z-50 flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-3 text-xs font-bold text-white shadow-xl animate-in fade-in slide-in-from-bottom-3">
-          <CheckCircle className="h-4 w-4 text-emerald-400" />
-          <span>{toastMessage}</span>
+    <div className="min-h-screen bg-slate-50/60 p-4 sm:p-6 lg:p-8 space-y-6">
+      
+      {/* Top Header & Refresh */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-100 shadow-xs">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="inline-flex rounded-md bg-sky-100 px-2.5 py-0.5 text-xs font-bold text-sky-700">
+              অ্যাডমিন প্যানেল
+            </span>
+            <span className="text-xs text-slate-400">• mydocbd.com</span>
+          </div>
+          <h1 className="text-2xl font-black text-slate-900 mt-1">
+            সিরিয়াল ও বুকিং ব্যবস্থাপনা
+          </h1>
+          <p className="text-xs text-slate-500 font-medium">
+            রোগীদের ডাক্তারের চেম্বার সিরিয়াল অনুমোদন, আপডেট এবং দ্রুত SMS পাঠানোর সিস্টেম।
+          </p>
         </div>
-      )}
 
-      <div className="mx-auto max-w-7xl space-y-6">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-xs">
+        <button
+          type="button"
+          onClick={fetchAppointmentsAndDoctors}
+          disabled={loading}
+          className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-100 hover:bg-slate-200 px-4 py-2.5 text-xs font-bold text-slate-700 transition active:scale-95 disabled:opacity-50 shrink-0"
+        >
+          <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin text-sky-600' : ''}`} />
+          <span>রিফ্রেশ ডেটা</span>
+        </button>
+      </div>
+
+      {/* Real-time Stat Badges */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Today's Patients */}
+        <div className="rounded-2xl border border-sky-100 bg-gradient-to-br from-sky-50 to-white p-4 shadow-xs flex items-center justify-between">
           <div>
-            <div className="flex items-center gap-2">
-              <span className="rounded-lg bg-emerald-50 p-2 text-emerald-600 border border-emerald-100">
-                <Calendar className="h-5 w-5" />
-              </span>
-              <h1 className="text-lg sm:text-xl font-black text-slate-900">
-                রোগীদের অ্যাপয়েন্টমেন্ট ও সিরিয়াল অনুমোদন
-              </h1>
-            </div>
-            <p className="mt-1 text-xs text-slate-500 font-medium">
-              চেম্বারের তথ্যানুযায়ী নির্ধারিত সিরিয়াল নম্বর, রুম নম্বর, ফ্লোর ও রিপোর্টিং সময় বরাদ্দ দিন।
-            </p>
+            <div className="text-xs font-bold text-sky-700 uppercase tracking-wider">আজকের রোগী</div>
+            <div className="text-2xl font-black text-slate-900 mt-1">{stats.todayCount}</div>
           </div>
-
-          <button
-            onClick={loadAppointments}
-            className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 px-4 py-2.5 text-xs font-bold text-slate-700 transition cursor-pointer self-start sm:self-auto"
-          >
-            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-            <span>রিফ্রেশ</span>
-          </button>
-        </div>
-
-        {/* Search & Filters */}
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
-          <div className="relative w-full sm:w-80">
-            <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="রোগীর নাম, ফোন নম্বর বা বুকিং কোড দিয়ে খুঁজুন..."
-              className="w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-9 pr-4 py-2 text-xs font-bold text-slate-800 outline-none focus:border-[#0284C7] focus:bg-white"
-            />
-          </div>
-
-          <div className="flex items-center gap-2 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0">
-            {['All', 'Pending', 'Confirmed', 'Cancelled', 'Rejected'].map((st) => (
-              <button
-                key={st}
-                onClick={() => setFilterStatus(st)}
-                className={`rounded-lg px-3 py-1.5 text-xs font-extrabold transition cursor-pointer shrink-0 ${
-                  filterStatus === st
-                    ? 'bg-[#0284C7] text-white shadow-xs'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                }`}
-              >
-                {st === 'All' ? 'সকল সিরিয়াল' : st === 'Pending' ? 'অপেক্ষমান (Pending)' : st === 'Confirmed' ? 'অনুমোদিত (Confirmed)' : st}
-              </button>
-            ))}
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-sky-100 text-sky-600 font-bold">
+            <Calendar className="h-6 w-6" />
           </div>
         </div>
 
-        {/* Table */}
-        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr className="bg-slate-50/90 text-slate-500 font-bold border-b border-slate-200">
-                  <th className="p-4 text-[11px] uppercase tracking-wider">বুকিং কোড & তারিখ</th>
-                  <th className="p-4 text-[11px] uppercase tracking-wider">রোগীর নাম ও মোবাইল</th>
-                  <th className="p-4 text-[11px] uppercase tracking-wider">ডাক্তার ও স্পেশালিটি</th>
-                  <th className="p-4 text-[11px] uppercase tracking-wider">বরাদ্দকৃত চেম্বার ও রুম</th>
-                  <th className="p-4 text-[11px] uppercase tracking-wider text-center">স্ট্যাটাস</th>
-                  <th className="p-4 text-[11px] uppercase tracking-wider text-center">অ্যাকশন</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
-                {loading ? (
-                  <tr>
-                    <td colSpan={6} className="p-10 text-center text-slate-400 font-bold">
-                      <RefreshCw className="mx-auto h-6 w-6 animate-spin mb-2 text-[#0284C7]" />
-                      অ্যাপয়েন্টমেন্ট লোড হচ্ছে...
-                    </td>
-                  </tr>
-                ) : filtered.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="p-10 text-center text-slate-400 font-bold">
-                      কোনো বুকিং পাওয়া যায়নি।
-                    </td>
-                  </tr>
-                ) : (
-                  filtered.map((app) => {
-                    const code = app.booking_code || app.id;
-                    const pName = app.patient_name || app.patientName;
-                    const pPhone = app.patient_phone || app.patientMobile || app.patientPhone;
-                    const pDate = app.preferred_date || app.preferredDate;
-                    const status = app.status || 'Pending';
-                    const docName = app.doctors?.name || app.doctorName || 'ডাক্তার';
-                    const docDegrees = app.doctors?.degrees || app.doctorDegrees || '';
-                    const facName = app.chambers?.facilities?.name || app.facilityName || app.assigned_facility_name || 'চেম্বার';
+        {/* Pending Serials */}
+        <div className="rounded-2xl border border-amber-100 bg-gradient-to-br from-amber-50 to-white p-4 shadow-xs flex items-center justify-between">
+          <div>
+            <div className="text-xs font-bold text-amber-700 uppercase tracking-wider">পেন্ডিং সিরিয়াল</div>
+            <div className="text-2xl font-black text-amber-900 mt-1">{stats.pendingCount}</div>
+          </div>
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-amber-100 text-amber-600 font-bold">
+            <Clock className="h-6 w-6" />
+          </div>
+        </div>
 
-                    return (
-                      <tr key={code} className="hover:bg-slate-50/60 transition">
-                        <td className="p-4">
-                          <span className="inline-block rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-black text-slate-700 mb-1 border border-slate-200">
-                            #{code}
-                          </span>
-                          <div className="text-slate-500 text-[11px] font-bold flex items-center gap-1">
-                            <Calendar className="h-3 w-3 text-[#0284C7]" />
-                            <span>{pDate}</span>
-                          </div>
-                        </td>
+        {/* Confirmed Serials */}
+        <div className="rounded-2xl border border-emerald-100 bg-gradient-to-br from-emerald-50 to-white p-4 shadow-xs flex items-center justify-between">
+          <div>
+            <div className="text-xs font-bold text-emerald-700 uppercase tracking-wider">অনুমোদিত সিরিয়াল</div>
+            <div className="text-2xl font-black text-emerald-900 mt-1">{stats.confirmedCount}</div>
+          </div>
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-100 text-emerald-600 font-bold">
+            <CheckCircle2 className="h-6 w-6" />
+          </div>
+        </div>
 
-                        <td className="p-4">
-                          <div className="font-extrabold text-slate-900">{pName}</div>
-                          <div className="text-slate-500 text-[11px] flex items-center gap-1 mt-0.5 font-bold">
-                            <Phone className="h-3 w-3 text-emerald-600" />
-                            <span>{pPhone}</span>
-                          </div>
-                        </td>
-
-                        <td className="p-4">
-                          <div className="font-extrabold text-slate-800">{docName}</div>
-                          {docDegrees && <div className="text-[10px] text-slate-400 font-medium">{docDegrees}</div>}
-                        </td>
-
-                        <td className="p-4">
-                          <div className="font-extrabold text-[#0284C7] flex items-center gap-1">
-                            <Building2 className="h-3.5 w-3.5 shrink-0" />
-                            <span>{facName}</span>
-                          </div>
-                          {app.assigned_room_no || app.assignedRoomNo ? (
-                            <div className="text-[10px] font-bold text-slate-600 mt-0.5">
-                              সিরিয়াল: <span className="text-emerald-700 font-black">{app.serial_no || app.serialNo || '০১'}</span> | রুম: {app.assigned_room_no || app.assignedRoomNo} ({app.assigned_floor || app.assignedFloor || ''})
-                            </div>
-                          ) : (
-                            <div className="text-[10px] text-amber-600 font-bold mt-0.5 italic">
-                              রুম বরাদ্দ পেন্ডিং
-                            </div>
-                          )}
-                        </td>
-
-                        <td className="p-4 text-center">
-                          <span className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-extrabold ${
-                            status === 'Confirmed'
-                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                              : status === 'Rejected' || status === 'Cancelled'
-                              ? 'bg-rose-50 text-rose-700 border border-rose-200'
-                              : 'bg-amber-50 text-amber-700 border border-amber-200'
-                          }`}>
-                            {status === 'Confirmed' ? 'অনুমোদিত' : status === 'Pending' ? 'অপেক্ষমান' : status}
-                          </span>
-                        </td>
-
-                        <td className="p-4 text-center">
-                          <button
-                            onClick={() => handleOpenConfirmModal(app)}
-                            className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold cursor-pointer transition shadow-xs ${
-                              status === 'Confirmed'
-                                ? 'bg-slate-100 hover:bg-slate-200 text-slate-700'
-                                : 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                            }`}
-                          >
-                            <Check className="h-3.5 w-3.5 stroke-[3]" />
-                            <span>{status === 'Confirmed' ? 'রুম/সিরিয়াল পরিবর্তন' : 'অনুমোদন ও রুম প্রদান'}</span>
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
+        {/* Total Bookings */}
+        <div className="rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-4 shadow-xs flex items-center justify-between">
+          <div>
+            <div className="text-xs font-bold text-slate-600 uppercase tracking-wider">মোট বুকিং</div>
+            <div className="text-2xl font-black text-slate-900 mt-1">{stats.totalCount}</div>
+          </div>
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-200 text-slate-700 font-bold">
+            <Users className="h-6 w-6" />
           </div>
         </div>
       </div>
 
-      {/* Confirmation Modal */}
-      {confirmingApp && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4 animate-in fade-in">
-          <div className="w-full max-w-lg bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden animate-in zoom-in-95">
-            <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4 bg-emerald-50/50">
-              <div className="flex items-center gap-2">
-                <div className="h-8 w-8 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700 font-bold">
-                  <Check className="h-4 w-4 stroke-[3]" />
-                </div>
-                <div>
-                  <h3 className="font-extrabold text-slate-900 text-sm">সিরিয়াল অনুমোদন ও রুম নম্বর বরাদ্দ</h3>
-                  <p className="text-[11px] text-[#0284C7] font-bold">বুকিং আইডি: #{confirmingApp.booking_code || confirmingApp.id}</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setConfirmingApp(null)}
-                className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700 cursor-pointer"
-              >
-                <X className="h-4 w-4" />
-              </button>
+      {/* Advanced Multi-Filter Control Bar */}
+      <div className="rounded-2xl bg-white border border-slate-100 p-5 shadow-xs space-y-4">
+        
+        {/* Row 1: Search & Date Filter */}
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+          
+          {/* Patient Search */}
+          <div className="md:col-span-5 relative">
+            <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1">
+              <Search className="h-3.5 w-3.5 text-sky-600" />
+              রোগীর নাম / ফোন সার্চ
+            </label>
+            <div className="relative">
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="নাম বা মোবাইল নম্বর লিখুন..."
+                className="w-full rounded-xl border border-slate-200 pl-10 pr-4 py-2.5 text-xs font-medium text-slate-800 focus:border-sky-500 focus:ring-2 focus:ring-sky-100 outline-none transition"
+              />
+              <Search className="absolute left-3.5 top-3 h-4 w-4 text-slate-400" />
+              {searchQuery && (
+                <button 
+                  onClick={() => setSearchQuery('')} 
+                  className="absolute right-3 top-3 text-slate-400 hover:text-slate-600 text-xs font-bold"
+                >
+                  ✕
+                </button>
+              )}
             </div>
+          </div>
 
-            <form onSubmit={handleConfirmSubmit} className="p-6 space-y-4 text-xs font-semibold">
-              {/* Patient, Doctor & Hospital Card Snapshot */}
-              <div className="space-y-2 p-3 rounded-xl bg-slate-50 border border-slate-200">
-                <div className="grid grid-cols-2 gap-3 pb-2 border-b border-slate-200/60">
-                  <div>
-                    <span className="block text-[10px] font-bold text-slate-400">রোগীর নাম</span>
-                    <span className="font-extrabold text-slate-900 text-xs block">{confirmingApp.patient_name || confirmingApp.patientName}</span>
-                    <span className="block text-[10px] text-slate-500 font-bold">{confirmingApp.patient_phone || confirmingApp.patientMobile}</span>
-                  </div>
-                  <div>
-                    <span className="block text-[10px] font-bold text-slate-400">ডাক্তার ও তারিখ</span>
-                    <span className="font-extrabold text-slate-900 text-xs block">{confirmingApp.doctors?.name || confirmingApp.doctorName || 'চিকিৎসক'}</span>
-                    <span className="block text-[10px] text-emerald-700 font-bold">{confirmingApp.preferred_date || confirmingApp.preferredDate}</span>
-                  </div>
-                </div>
-                <div className="flex items-start gap-2 pt-1 text-[#0284C7] bg-sky-50/70 p-2 rounded-lg border border-sky-100">
-                  <Building2 className="h-4 w-4 shrink-0 mt-0.5 text-[#0284C7]" />
-                  <div>
-                    <span className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">হাসপাতাল / ডায়াগনস্টিক সেন্টারের নাম</span>
-                    <span className="font-extrabold text-slate-900 text-xs">{confFacilityName || confirmingApp.facilityName || 'পপুলার ডায়াগনস্টিক সেন্টার'}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Facility Input */}
-              <div>
-                <label className="block text-[#0284C7] mb-1 font-extrabold">হাসপাতাল / ডায়াগনস্টিক সেন্টারের নাম (Facility Name) *</label>
-                <input
-                  type="text"
-                  required
-                  value={confFacilityName}
-                  onChange={(e) => setConfFacilityName(e.target.value)}
-                  className="w-full rounded-xl border border-slate-300 bg-white py-2.5 px-3 text-xs font-bold text-slate-800 outline-none focus:border-[#0284C7]"
-                  placeholder="যেমন: পপুলার ডায়াগনস্টিক সেন্টার, রাজশাহী"
-                />
-              </div>
-
-              {/* Serial & Room Inputs */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[#0284C7] mb-1 font-extrabold">নির্ধারিত সিরিয়াল নম্বর *</label>
-                  <input
-                    type="text"
-                    required
-                    value={confSerialNo}
-                    onChange={(e) => setConfSerialNo(e.target.value)}
-                    className="w-full rounded-xl border border-slate-300 bg-white py-2.5 px-3 text-xs font-bold text-slate-800 outline-none focus:border-[#0284C7]"
-                    placeholder="যেমন: ০১"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[#0284C7] mb-1 font-extrabold">রুম নম্বর (Room No) *</label>
-                  <input
-                    type="text"
-                    required
-                    value={confRoomNo}
-                    onChange={(e) => setConfRoomNo(e.target.value)}
-                    className="w-full rounded-xl border border-slate-300 bg-white py-2.5 px-3 text-xs font-bold text-slate-800 outline-none focus:border-[#0284C7]"
-                    placeholder="যেমন: ৩১০"
-                  />
-                </div>
-              </div>
-
-              {/* Floor & Building Inputs */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-slate-700 mb-1 font-extrabold">ফ্লোর / কত তলা (Floor) *</label>
-                  <input
-                    type="text"
-                    required
-                    value={confFloor}
-                    onChange={(e) => setConfFloor(e.target.value)}
-                    className="w-full rounded-xl border border-slate-300 bg-white py-2.5 px-3 text-xs font-bold text-slate-800 outline-none focus:border-[#0284C7]"
-                    placeholder="যেমন: ৩য় তলা"
-                  />
-                </div>
-                <div>
-                  <label className="block text-slate-700 mb-1 font-extrabold">বিল্ডিং / লিফট তথ্য</label>
-                  <input
-                    type="text"
-                    value={confBuilding}
-                    onChange={(e) => setConfBuilding(e.target.value)}
-                    className="w-full rounded-xl border border-slate-300 bg-white py-2.5 px-3 text-xs font-bold text-slate-800 outline-none focus:border-[#0284C7]"
-                    placeholder="যেমন: মেইন ভবন, লিফট-১"
-                  />
-                </div>
-              </div>
-
-              {/* Visiting Time */}
-              <div>
-                <label className="block text-slate-700 mb-1 font-extrabold">রিপোর্টিং / উপস্থিতির সময়সূচী *</label>
-                <input
-                  type="text"
-                  required
-                  value={confVisitingTime}
-                  onChange={(e) => setConfVisitingTime(e.target.value)}
-                  className="w-full rounded-xl border border-slate-300 bg-white py-2.5 px-3 text-xs font-bold text-slate-800 outline-none focus:border-[#0284C7]"
-                  placeholder="যেমন: বিকাল ৫:৩০ মিনিট"
-                />
-              </div>
-
-              {/* Admin Note / Special Instructions */}
-              <div>
-                <label className="block text-slate-700 mb-1 font-extrabold">রোগীর জন্য বিশেষ নির্দেশিকা (ঐচ্ছিক)</label>
-                <input
-                  type="text"
-                  value={confAdminNotes}
-                  onChange={(e) => setConfAdminNotes(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50/50 py-2.5 px-3 text-xs font-bold text-slate-800 outline-none focus:border-[#0284C7] focus:bg-white"
-                  placeholder="যেমন: পূর্বের সকল প্রেসক্রিপশন ও রিপোর্ট সাথে রাখবেন।"
-                />
-              </div>
-
-              <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
+          {/* Date Picker & Pills */}
+          <div className="md:col-span-4">
+            <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center justify-between">
+              <span className="flex items-center gap-1">
+                <Calendar className="h-3.5 w-3.5 text-sky-600" />
+                তারিখ নির্বাচন
+              </span>
+              <div className="flex items-center gap-1">
                 <button
                   type="button"
-                  onClick={() => setConfirmingApp(null)}
-                  className="rounded-xl border border-slate-200 px-4 py-2 text-slate-600 hover:bg-slate-50 transition cursor-pointer font-bold"
+                  onClick={() => setDateFilter('')}
+                  className={`text-[10px] font-bold px-1.5 py-0.5 rounded transition ${!dateFilter ? 'bg-sky-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
                 >
-                  বাতিল
+                  সকল
                 </button>
                 <button
-                  type="submit"
-                  disabled={confSubmitting}
-                  className="rounded-xl bg-emerald-600 hover:bg-emerald-700 px-5 py-2.5 text-white font-extrabold transition cursor-pointer shadow-xs flex items-center gap-1.5 disabled:opacity-50"
+                  type="button"
+                  onClick={() => setDateFilter(todayStr)}
+                  className={`text-[10px] font-bold px-1.5 py-0.5 rounded transition ${dateFilter === todayStr ? 'bg-sky-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
                 >
-                  <Check className="h-4 w-4 stroke-[3]" />
-                  <span>{confSubmitting ? 'প্রসেসিং হচ্ছে...' : 'অনুমোদন ও কনফার্ম প্রদান'}</span>
+                  আজকে
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDateFilter(tomorrowStr)}
+                  className={`text-[10px] font-bold px-1.5 py-0.5 rounded transition ${dateFilter === tomorrowStr ? 'bg-sky-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                >
+                  আগামীকাল
                 </button>
               </div>
-            </form>
+            </label>
+            <input
+              type="date"
+              value={dateFilter}
+              onChange={(e) => setDateFilter(e.target.value)}
+              className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-xs font-semibold text-slate-800 focus:border-sky-500 focus:ring-2 focus:ring-sky-100 outline-none transition"
+            />
           </div>
+
+          {/* Doctor Dropdown */}
+          <div className="md:col-span-3">
+            <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1">
+              <User className="h-3.5 w-3.5 text-sky-600" />
+              ডাক্তার ফিল্টার
+            </label>
+            <select
+              value={selectedDoctorId}
+              onChange={(e) => setSelectedDoctorId(e.target.value)}
+              className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-xs font-semibold text-slate-800 focus:border-sky-500 focus:ring-2 focus:ring-sky-100 outline-none transition bg-white"
+            >
+              <option value="ALL">সকল ডাক্তার</option>
+              {doctorsList.map((doc) => (
+                <option key={doc.id} value={doc.id}>
+                  {doc.name} {doc.specialtyName ? `(${doc.specialtyName})` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+
+        </div>
+
+        {/* Row 2: Status Tabs & Reset Button */}
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-100">
+          
+          {/* Status Tabs */}
+          <div className="flex items-center gap-1.5 bg-slate-100/80 p-1 rounded-xl">
+            {(['ALL', 'Pending', 'Confirmed', 'Cancelled'] as const).map((st) => {
+              const labelMap = {
+                ALL: 'সকল',
+                Pending: 'পেন্ডিং',
+                Confirmed: 'অনুমোদিত',
+                Cancelled: 'বাতিল'
+              };
+
+              const isActive = statusTab === st;
+
+              return (
+                <button
+                  key={st}
+                  type="button"
+                  onClick={() => setStatusTab(st)}
+                  className={`px-3.5 py-1.5 text-xs font-bold rounded-lg transition ${
+                    isActive
+                      ? 'bg-white text-slate-900 shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  {labelMap[st]}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Reset Filters Button */}
+          <button
+            type="button"
+            onClick={handleResetFilters}
+            className="flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-sky-600 hover:bg-sky-50 px-3 py-1.5 rounded-lg border border-slate-200 transition"
+          >
+            <RotateCcw className="h-3.5 w-3.5" />
+            <span>ফিল্টার রিসেট</span>
+          </button>
+
+        </div>
+
+      </div>
+
+      {/* Error Alert */}
+      {actionError && (
+        <div className="flex items-center gap-2 rounded-xl bg-red-50 p-4 text-xs font-semibold text-red-700 border border-red-200">
+          <AlertCircle className="h-4 w-4 text-red-500 shrink-0" />
+          <span>{actionError}</span>
         </div>
       )}
+
+      {/* Data Table Container */}
+      <div className="rounded-2xl bg-white border border-slate-100 shadow-xs overflow-hidden">
+        
+        {loading ? (
+          /* Skeleton Loader */
+          <div className="p-8 space-y-4">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+              <div className="h-4 w-32 bg-slate-200 rounded animate-pulse"></div>
+              <div className="h-4 w-24 bg-slate-200 rounded animate-pulse"></div>
+            </div>
+            {[1, 2, 3, 4, 5].map((i) => (
+              <div key={i} className="flex items-center justify-between gap-4 py-3">
+                <div className="h-10 w-24 bg-slate-100 rounded-xl animate-pulse"></div>
+                <div className="h-10 w-36 bg-slate-100 rounded-xl animate-pulse"></div>
+                <div className="h-10 w-48 bg-slate-100 rounded-xl animate-pulse"></div>
+                <div className="h-10 w-20 bg-slate-100 rounded-xl animate-pulse"></div>
+                <div className="h-10 w-28 bg-slate-100 rounded-xl animate-pulse"></div>
+              </div>
+            ))}
+          </div>
+        ) : filteredAppointments.length === 0 ? (
+          /* Empty State */
+          <div className="p-12 text-center space-y-3">
+            <div className="inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-100 text-slate-400 mb-2">
+              <FileText className="h-8 w-8" />
+            </div>
+            <h3 className="text-base font-bold text-slate-800">কোনো সিরিয়াল পাওয়া যায়নি</h3>
+            <p className="text-xs text-slate-500 max-w-sm mx-auto">
+              নির্বাচিত ফিল্টার বা সার্চ কোয়েরির সাথে মেলে এমন কোনো বুকিং পাওয়া যায়নি।
+            </p>
+            <button
+              type="button"
+              onClick={handleResetFilters}
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-sky-600 hover:underline pt-2"
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+              <span>সকল ফিল্টার রিসেট করুন</span>
+            </button>
+          </div>
+        ) : (
+          /* Data Table */
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-50 border-b border-slate-100 text-slate-500 font-bold uppercase tracking-wider">
+                <tr>
+                  <th className="px-5 py-3.5">তারিখ</th>
+                  <th className="px-5 py-3.5">রোগীর তথ্য</th>
+                  <th className="px-5 py-3.5">ডাক্তার ও বিভাগ</th>
+                  <th className="px-5 py-3.5">হাসপাতাল ও রুম</th>
+                  <th className="px-5 py-3.5">স্ট্যাটাস</th>
+                  <th className="px-5 py-3.5 text-right">অ্যাকশন</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
+                {filteredAppointments.map((item) => {
+                  const doctor = item.doctors || {};
+                  const chamber = item.chambers || {};
+                  const facility = chamber.facilities || item.facilities || {};
+
+                  const doctorName = doctor.name || item.doctorName || item.doctor_name || 'বিশেষজ্ঞ ডাক্তার';
+                  const specialty = doctor.specialties?.name_bn || item.doctorSpecialty || doctor.specialty || 'মেডিসিন';
+
+                  const patientName = item.patient_name || item.patientName || 'রোগী';
+                  const patientPhone = item.patient_mobile || item.patient_phone || item.patientMobile || '';
+                  const patientAge = item.patient_age || item.patientAge || '';
+
+                  const preferredDate = item.preferred_date || item.appointment_date || item.preferredDate || '';
+                  const facilityName = 
+                    item.assigned_facility_name || 
+                    facility.name || 
+                    item.facilityName || 
+                    item.facility_name || 
+                    'হাসপাতাল/চেম্বার';
+
+                  const roomNo = item.assigned_room_no || chamber.room_no || item.chamberRoomNo || '';
+                  const floor = item.assigned_floor || chamber.floor || item.chamberFloor || '';
+                  const serialNo = item.serial_no || item.serialNo || '';
+                  const isPending = item.status === 'Pending';
+                  const isConfirmed = item.status === 'Confirmed';
+                  const isCancelled = item.status === 'Cancelled' || item.status === 'Rejected';
+
+                  // Build SMS URI for quick SMS click
+                  const quickSmsText = generateSmsText({
+                    patientName,
+                    doctorName,
+                    facilityName,
+                    serialNo: serialNo || '০১',
+                    roomNo,
+                    visitingTime: item.confirmed_visiting_time || chamber.visiting_time || item.visitingTime,
+                    date: preferredDate
+                  });
+                  const quickSmsUri = getSmsUri(patientPhone, quickSmsText);
+
+                  return (
+                    <tr key={item.id} className="hover:bg-slate-50/80 transition">
+                      
+                      {/* Date */}
+                      <td className="px-5 py-4 align-top">
+                        <div className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-800 bg-slate-100 px-2.5 py-1 rounded-lg">
+                          <Calendar className="h-3.5 w-3.5 text-sky-600" />
+                          <span>{preferredDate || 'তারিখ জানা নেই'}</span>
+                        </div>
+                      </td>
+
+                      {/* Patient Info */}
+                      <td className="px-5 py-4 align-top">
+                        <div className="font-bold text-slate-900">{patientName}</div>
+                        {patientAge && <div className="text-[11px] text-slate-500">বয়স: {patientAge} বছর</div>}
+                        {patientPhone && (
+                          <a
+                            href={`tel:${cleanPhone(patientPhone)}`}
+                            className="mt-1 inline-flex items-center gap-1 text-[11px] font-bold text-sky-600 hover:underline"
+                          >
+                            <Phone className="h-3 w-3" />
+                            <span>{cleanPhone(patientPhone)}</span>
+                          </a>
+                        )}
+                      </td>
+
+                      {/* Doctor & Specialty */}
+                      <td className="px-5 py-4 align-top">
+                        <div className="font-bold text-slate-900">{doctorName}</div>
+                        <div className="mt-1 inline-flex items-center gap-1 text-[11px] font-bold text-sky-700 bg-sky-50 px-2 py-0.5 rounded-md border border-sky-100">
+                          {specialty}
+                        </div>
+                      </td>
+
+                      {/* Facility & Room */}
+                      <td className="px-5 py-4 align-top">
+                        <div className="font-bold text-slate-800 flex items-center gap-1">
+                          <Building2 className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                          <span>{facilityName}</span>
+                        </div>
+                        {(roomNo || floor) && (
+                          <div className="mt-1 text-[11px] text-slate-500 flex items-center gap-1.5">
+                            {roomNo && <span className="font-semibold text-slate-700">রুম: {roomNo}</span>}
+                            {floor && <span>({floor})</span>}
+                          </div>
+                        )}
+                        {serialNo && (
+                          <div className="mt-1 inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                            <Hash className="h-3 w-3 text-emerald-600" />
+                            <span>সিরিয়াল: {serialNo}</span>
+                          </div>
+                        )}
+                      </td>
+
+                      {/* Status Badge */}
+                      <td className="px-5 py-4 align-top">
+                        {isPending && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-bold text-amber-800 border border-amber-200">
+                            <Clock className="h-3 w-3 text-amber-600" />
+                            পেন্ডিং
+                          </span>
+                        )}
+                        {isConfirmed && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-bold text-emerald-800 border border-emerald-200">
+                            <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                            অনুমোদিত
+                          </span>
+                        )}
+                        {isCancelled && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2.5 py-1 text-[11px] font-bold text-red-800 border border-red-200">
+                            <XCircle className="h-3 w-3 text-red-600" />
+                            বাতিল
+                          </span>
+                        )}
+                      </td>
+
+                      {/* Actions */}
+                      <td className="px-5 py-4 align-top text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          
+                          {isPending && (
+                            <button
+                              type="button"
+                              onClick={() => setConfirmingAppointment(item)}
+                              className="inline-flex items-center gap-1 rounded-xl bg-sky-600 hover:bg-sky-700 px-3 py-1.5 text-xs font-bold text-white shadow-xs transition active:scale-95"
+                            >
+                              <CheckCircle2 className="h-3.5 w-3.5" />
+                              <span>অনুমোদন করুন</span>
+                            </button>
+                          )}
+
+                          {isConfirmed && (
+                            <>
+                              <a
+                                href={quickSmsUri}
+                                target="_self"
+                                className="inline-flex items-center gap-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 px-3 py-1.5 text-xs font-bold text-white shadow-xs transition active:scale-95 cursor-pointer"
+                              >
+                                <Send className="h-3.5 w-3.5" />
+                                <span>📱 SMS পাঠান</span>
+                              </a>
+
+                              <button
+                                type="button"
+                                onClick={() => setConfirmingAppointment(item)}
+                                className="inline-flex items-center gap-1 rounded-xl bg-slate-100 hover:bg-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition"
+                                title="সিরিয়াল আপডেট করুন"
+                              >
+                                <span>এডিট</span>
+                              </button>
+                            </>
+                          )}
+
+                          <button
+                            type="button"
+                            onClick={() => handleDelete(item.id)}
+                            className="inline-flex items-center justify-center p-1.5 rounded-xl text-slate-400 hover:bg-red-50 hover:text-red-600 transition"
+                            title="মুছুন / বাতিল"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+
+                        </div>
+                      </td>
+
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+      </div>
+
+      {/* Confirmation & SMS Modal */}
+      {confirmingAppointment && (
+        <ConfirmAppointmentModal
+          isOpen={!!confirmingAppointment}
+          appointment={confirmingAppointment}
+          onClose={() => setConfirmingAppointment(null)}
+          onSuccess={() => {
+            fetchAppointmentsAndDoctors();
+            setConfirmingAppointment(null);
+          }}
+        />
+      )}
+
     </div>
   );
 }

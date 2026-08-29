@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import AdminSpecialtiesPage from '../../app/admin/specialties/page';
 import { 
   Users, 
   Calendar, 
@@ -53,6 +54,7 @@ import {
 import AdminLayout from './admin/AdminLayout';
 import DoctorFormModal from './admin/DoctorFormModal';
 import { uploadImage } from '../lib/uploadImage';
+import AdminAppointmentsPage from '../app/admin/appointments/page';
 
 interface AdminDashboardProps {
   doctors: Doctor[];
@@ -820,6 +822,7 @@ export default function AdminDashboard({
       facilitiesCount={facilities.length}
       blogsCount={blogsList.length}
       districtsCount={districts.length}
+      specialtiesCount={specialties.length}
       currentAdmin={currentAdmin}
       onSignOut={onSignOut || (() => {})}
     >
@@ -959,124 +962,9 @@ export default function AdminDashboard({
         </div>
       )}
 
-      {/* Tab 2: Appointment Request Management Table */}
+      {/* Tab 2: Appointment Request Management Table with Multi-Filter & SMS */}
       {subTab === 'appointments' && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-sm font-bold text-slate-800 font-sans">সিরিয়াল আবেদনসমূহ</h2>
-              <p className="text-[10px] text-slate-400 mt-0.5 font-bold">ওয়ান-ক্লিক কনফার্ম/ক্যান্সেল টগল বা ডিটেইলড কনফার্মেশন</p>
-            </div>
-            <span className="text-[10px] font-bold text-slate-400 bg-slate-100 border border-slate-200 rounded-md px-2 py-1">
-              পেন্ডিং: {appointments.filter(a => a.status === 'Pending').length} / মোট: {appointments.length}
-            </span>
-          </div>
-
-          <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200">
-                  <th className="p-3 text-[11px]">আবেদন আইডি</th>
-                  <th className="p-3 text-[11px]">রোগীর নাম ও মোবাইল</th>
-                  <th className="p-3 text-[11px]">ডাক্তার চেম্বার</th>
-                  <th className="p-3 text-[11px]">আবেদনের তারিখ</th>
-                  <th className="p-3 text-[11px]">বর্তমান অবস্থা (Status)</th>
-                  <th className="p-3 text-center text-[11px]">দ্রুত অ্যাকশন (Quick Toggle)</th>
-                </tr>
-              </thead>
-              <tbody className="text-slate-700 font-semibold">
-                {appointments.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="p-8 text-center text-slate-400 font-bold">
-                      কোন সিরিয়াল আবেদন পাওয়া যায়নি।
-                    </td>
-                  </tr>
-                ) : (
-                  [...appointments]
-                    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-                    .map((app) => (
-                      <tr key={app.id} className="border-b border-slate-150 hover:bg-slate-50/50" id={`admin-row-${app.id}`}>
-                        <td className="p-3 font-mono font-bold text-slate-900">{app.id.slice(0, 8)}</td>
-                        <td className="p-3">
-                          <p className="font-bold text-slate-800">{app.patientName}</p>
-                          <p className="text-[10px] text-slate-400 mt-0.5 font-bold">বয়স: {app.patientAge} বছর • {app.patientMobile || app.patientPhone}</p>
-                        </td>
-                        <td className="p-3">
-                          <p className="font-bold text-slate-800">{app.doctorName}</p>
-                          <p className="text-[10px] text-slate-400 mt-0.5">{app.facilityName}</p>
-                        </td>
-                        <td className="p-3">
-                          <div className="flex items-center gap-1.5 font-bold text-slate-700">
-                            <Calendar className="h-3.5 w-3.5 text-slate-400" />
-                            <span>{app.preferredDate}</span>
-                          </div>
-                        </td>
-                        <td className="p-3">
-                          {app.status === 'Pending' && (
-                            <span className="inline-flex rounded-md bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700 border border-amber-200/30">
-                              পেন্ডিং (Pending)
-                            </span>
-                          )}
-                          {app.status === 'Confirmed' && (
-                            <span className="inline-flex rounded-md bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700 border border-emerald-200/30">
-                              নিশ্চিত (Confirmed)
-                            </span>
-                          )}
-                          {app.status === 'Cancelled' && (
-                            <span className="inline-flex rounded-md bg-rose-50 px-2 py-0.5 text-[10px] font-bold text-rose-700 border border-rose-200/30">
-                              বাতিল (Cancelled)
-                            </span>
-                          )}
-                        </td>
-                        <td className="p-3">
-                          <div className="flex items-center justify-center gap-1.5">
-                            <button
-                              onClick={() => handleOpenConfirmModal(app)}
-                              className={`flex items-center gap-1 rounded-md px-2.5 py-1 border transition text-xs font-bold ${
-                                app.status === 'Confirmed'
-                                  ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 cursor-pointer'
-                                  : 'border-emerald-300 bg-emerald-600 text-white hover:bg-emerald-700 cursor-pointer shadow-sm'
-                              }`}
-                              title={app.status === 'Confirmed' ? "সিরিয়াল ও রুম পরিবর্তন করুন" : "সিরিয়াল অনুমোদন ও রুম বরাদ্দ করুন"}
-                              id={`admin-confirm-${app.id}`}
-                            >
-                              <Check className="h-3.5 w-3.5 stroke-[2.5]" />
-                              <span>{app.status === 'Confirmed' ? `রুম: ${app.assignedRoomNo || 'নির্ধারিত'} (${app.serialNo || '০১'})` : 'অনুমোদন ও রুম দিন'}</span>
-                            </button>
-
-                            <button
-                              onClick={() => onUpdateAppointmentStatus(app.id, 'Cancelled')}
-                              disabled={app.status === 'Cancelled'}
-                              className={`flex h-7 w-7 items-center justify-center rounded-md border transition ${
-                                app.status === 'Cancelled'
-                                  ? 'bg-slate-50 border-slate-100 text-slate-300 cursor-not-allowed'
-                                  : 'border-rose-200 bg-white text-rose-600 hover:bg-rose-50 cursor-pointer'
-                              }`}
-                              title="Cancel Appointment"
-                              id={`admin-cancel-${app.id}`}
-                            >
-                              <X className="h-3.5 w-3.5 stroke-[2.5]" />
-                            </button>
-
-                            {app.status !== 'Pending' && (
-                              <button
-                                onClick={() => onUpdateAppointmentStatus(app.id, 'Pending')}
-                                className="flex h-7 w-7 items-center justify-center rounded-md border border-amber-200 bg-white text-amber-600 hover:bg-amber-50 cursor-pointer"
-                                title="Reset to Pending"
-                                id={`admin-pending-${app.id}`}
-                              >
-                                <AlertCircle className="h-3.5 w-3.5" />
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <AdminAppointmentsPage />
       )}
 
       {/* SUBTAB 2: Doctor Directory Management & Form */}
@@ -1763,93 +1651,7 @@ export default function AdminDashboard({
       )}
 
       {subTab === 'specialties' && (
-        <div className="space-y-4 animate-in fade-in duration-150">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-sm font-bold text-slate-800">বিশেষজ্ঞতা ও ক্যাটাগরি সমূহ</h2>
-              <p className="text-[10px] text-slate-400 mt-0.5 font-bold">ডাক্তার তালিকাভুক্তির জন্য ক্যাটাগরি ও আইকন কাস্টমাইজেশন</p>
-            </div>
-            <button
-              onClick={() => {
-                setEditingSpecialty(null);
-                setSpecialtyNameBn('');
-                setSpecialtyNameEn('');
-                setSpecialtyIconName('Heart');
-                setSpecialtyOrder('0');
-                setSpecialtyActive(true);
-                setShowAddSpecialtyModal(true);
-              }}
-              className="flex items-center gap-1.5 rounded-lg bg-[#0284C7] hover:bg-[#0274af] px-3.5 py-2 text-xs font-bold text-white transition cursor-pointer"
-            >
-              <PlusCircle className="h-3.5 w-3.5" />
-              <span>নতুন ক্যাটাগরি যোগ করুন</span>
-            </button>
-          </div>
-
-          <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200">
-                  <th className="p-3 text-[11px]">ক্যাটাগরি (বাংলা)</th>
-                  <th className="p-3 text-[11px]">ক্যাটাগরি (ইংরেজি)</th>
-                  <th className="p-3 text-[11px]">আইকন কোড (Icon)</th>
-                  <th className="p-3 text-[11px]">প্রদর্শন ক্রম</th>
-                  <th className="p-3 text-[11px]">স্ট্যাটাস</th>
-                  <th className="p-3 text-center text-[11px]">অ্যাকশন</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 font-bold text-slate-700">
-                {specialties.map((spec) => (
-                  <tr key={spec.id} className="hover:bg-slate-50/50">
-                    <td className="p-3 text-slate-900 text-xs">{spec.nameBn}</td>
-                    <td className="p-3 text-slate-500 text-xs">{spec.nameEn}</td>
-                    <td className="p-3 text-xs">
-                      <span className="inline-flex items-center gap-1.5 rounded bg-purple-50 px-2 py-0.5 text-purple-700 border border-purple-100">
-                        {spec.iconName || 'Heart'}
-                      </span>
-                    </td>
-                    <td className="p-3 text-slate-500 text-xs">{spec.displayOrder || 0}</td>
-                    <td className="p-3">
-                      <span className={`inline-flex rounded-full px-2 py-0.5 text-[9px] ${
-                        spec.isActive
-                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                          : 'bg-slate-100 text-slate-400 border border-slate-200'
-                      }`}>
-                        {spec.isActive ? 'সক্রিয়' : 'নিষ্ক্রিয়'}
-                      </span>
-                    </td>
-                    <td className="p-3">
-                      <div className="flex items-center justify-center gap-2">
-                        <button
-                          onClick={() => {
-                            setEditingSpecialty(spec);
-                            setSpecialtyNameBn(spec.nameBn);
-                            setSpecialtyNameEn(spec.nameEn);
-                            setSpecialtyIconName(spec.iconName || 'Heart');
-                            setSpecialtyOrder((spec.displayOrder || 0).toString());
-                            setSpecialtyActive(spec.isActive);
-                            setShowAddSpecialtyModal(true);
-                          }}
-                          className="inline-flex items-center gap-1 rounded bg-slate-50 border border-slate-200 text-[10px] text-slate-600 hover:border-slate-400 py-1 px-2 cursor-pointer"
-                        >
-                          <Edit2 className="h-3 w-3" />
-                          <span>সম্পাদনা</span>
-                        </button>
-                        <button
-                          onClick={() => handleSpecialtyDelete(spec.id, spec.nameBn)}
-                          className="inline-flex items-center gap-1 rounded bg-red-50 border border-red-100 text-[10px] text-red-600 hover:bg-red-100 py-1 px-2 cursor-pointer"
-                        >
-                          <Trash2 className="h-3 w-3" />
-                          <span>মুছুন</span>
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <AdminSpecialtiesPage />
       )}
 
       {subTab === 'blogs' && (

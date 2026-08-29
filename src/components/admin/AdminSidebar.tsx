@@ -11,7 +11,9 @@ import {
   Image as ImageIcon, 
   LogOut, 
   UserCheck, 
-  Radio 
+  Radio,
+  Stethoscope,
+  Tag
 } from 'lucide-react';
 
 interface AdminSidebarProps {
@@ -22,6 +24,7 @@ interface AdminSidebarProps {
   facilitiesCount: number;
   blogsCount: number;
   districtsCount: number;
+  specialtiesCount?: number;
   currentAdmin: any;
   onSignOut: () => void;
 }
@@ -34,6 +37,7 @@ export default function AdminSidebar({
   facilitiesCount,
   blogsCount,
   districtsCount,
+  specialtiesCount = 0,
   currentAdmin,
   onSignOut
 }: AdminSidebarProps) {
@@ -61,6 +65,15 @@ export default function AdminSidebar({
       badge: doctorsCount > 0 ? {
         count: doctorsCount,
         color: 'bg-slate-100 text-slate-700 font-mono'
+      } : null
+    },
+    {
+      id: 'specialties',
+      label: 'স্পেশালিটি ও ক্যাটাগরি',
+      icon: Stethoscope,
+      badge: specialtiesCount > 0 ? {
+        count: specialtiesCount,
+        color: 'bg-sky-100 text-sky-800 font-mono'
       } : null
     },
     {

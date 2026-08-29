@@ -181,12 +181,27 @@ export default function BookingModal({
     const randomNum = Math.floor(1000 + Math.random() * 9000);
     const trackingId = `RJ-${randomNum}`;
 
+    const facName = currentChamber?.facilityName || doctor.facilityName || doctor.facility || '';
+    const room = currentChamber?.roomNo || doctor.chamberRoomNo || '';
+    const flr = currentChamber?.floor || doctor.chamberFloor || '';
+    const bld = currentChamber?.buildingStand || doctor.chamberBuildingStand || '';
+    const vTime = currentChamber?.visitingTime || doctor.visitingTime || '';
+
     const newAppointment: Appointment = {
       id: trackingId,
       doctorId: doctor.id,
       chamberId: currentChamber?.id || doctor.chamberId || '',
       doctorName: doctor.name,
-      facilityName: currentChamber?.facilityName || doctor.facilityName || doctor.facility,
+      facilityName: facName,
+      assignedFacilityName: facName,
+      chamberRoomNo: room,
+      assignedRoomNo: room,
+      chamberFloor: flr,
+      assignedFloor: flr,
+      chamberBuildingStand: bld,
+      assignedBuilding: bld,
+      visitingTime: vTime,
+      confirmedVisitingTime: vTime,
       patientName: patientName,
       patientAge: ageNum,
       patientMobile: patientMobile,

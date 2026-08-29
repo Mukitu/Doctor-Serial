@@ -10,6 +10,7 @@ interface AdminLayoutProps {
   facilitiesCount: number;
   blogsCount: number;
   districtsCount: number;
+  specialtiesCount?: number;
   currentAdmin: any;
   onSignOut: () => void;
   children: React.ReactNode;
@@ -23,6 +24,7 @@ export default function AdminLayout({
   facilitiesCount,
   blogsCount,
   districtsCount,
+  specialtiesCount = 0,
   currentAdmin,
   onSignOut,
   children
@@ -39,6 +41,7 @@ export default function AdminLayout({
         facilitiesCount={facilitiesCount}
         blogsCount={blogsCount}
         districtsCount={districtsCount}
+        specialtiesCount={specialtiesCount}
         currentAdmin={currentAdmin}
         onSignOut={onSignOut}
       />

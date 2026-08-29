@@ -10,7 +10,9 @@ export interface Specialty {
   id: string;
   nameBn: string;
   nameEn: string;
-  iconName: string;
+  slug?: string;
+  iconUrl?: string;
+  iconName?: string;
   isActive: boolean;
   displayOrder: number;
 }
@@ -112,6 +114,7 @@ export interface Appointment {
   preferredDate: string;
   status: 'Pending' | 'Confirmed' | 'Cancelled' | 'Rejected' | 'Completed';
   serialNo?: string;
+  assignedFacilityName?: string;
   assignedRoomNo?: string;
   assignedFloor?: string; // e.g., "৩য় তলা"
   assignedBuilding?: string; // e.g., "বিল্ডিং-বি, পূর্ব গেট স্ট্যান্ড"

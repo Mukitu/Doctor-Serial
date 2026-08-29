@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { POPULAR_SPECIALTIES, DISTRICTS, FACILITIES } from '../data/mockData';
 import { ActiveTab, District, Specialty, Facility } from '../types';
+import SpecialtyGrid from './SpecialtyGrid';
 
 interface HeroProps {
   setActiveTab: (tab: ActiveTab) => void;
@@ -275,48 +276,15 @@ export default function Hero({
 
         {/* Popular Specialties Category Grid */}
         <div className="mt-12 md:mt-16">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h2 className="text-lg font-bold text-slate-800 md:text-xl">
-                বিশেষজ্ঞ ক্যাটাগরি সমূহ
-              </h2>
-              <p className="text-xs text-slate-400 font-medium">আপনার কাঙ্ক্ষিত রোগ অনুযায়ী সঠিক বিশেষজ্ঞ নির্বাচন করুন</p>
-            </div>
-            <button
-              onClick={() => {
-                setSearchFilters({ district: selectedDistrict, specialty: '', facility: '' });
-                setActiveTab('doctors');
-              }}
-              className="group flex items-center gap-1 text-xs font-bold text-[#0284C7] hover:underline cursor-pointer"
-              id="view-all-specialties-btn"
-            >
-              <span>সকল ডাক্তার দেখুন</span>
-              <ChevronRight className="h-3.5 w-3.5 transition group-hover:translate-x-0.5" />
-            </button>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-            {renderedSpecialties.map((spec) => (
-              <div
-                key={spec.id}
-                onClick={() => handleCategoryClick(spec.name)}
-                className="group flex cursor-pointer flex-col items-center justify-center rounded-xl border border-slate-200 bg-white p-4 text-center transition hover:border-[#0284C7] hover:shadow-sm hover:bg-slate-50/50"
-                id={`category-card-${spec.id}`}
-              >
-                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-50 border border-slate-100 transition group-hover:scale-105 group-hover:bg-sky-50">
-                  {renderSpecialtyIcon(spec.icon)}
-                </div>
-                <h3 className="mt-2.5 font-bold text-slate-800 text-xs group-hover:text-[#0284C7] transition">
-                  {spec.name}
-                </h3>
-                {spec.labelEn && (
-                  <p className="text-[10px] font-bold text-slate-400 mt-0.5 line-clamp-1">
-                    {spec.labelEn}
-                  </p>
-                )}
-              </div>
-            ))}
-          </div>
+          <SpecialtyGrid
+            specialties={specialties}
+            onSelectSpecialty={(specName) => handleCategoryClick(specName)}
+            onClearFilter={() => {
+              setSearchFilters({ district: selectedDistrict, specialty: '', facility: '' });
+              setActiveTab('doctors');
+            }}
+            selectedSpecialty={searchFilters?.specialty || ''}
+          />
         </div>
 
         {/* 3-Step Patient Workflow Banner */}
