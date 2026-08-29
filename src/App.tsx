@@ -279,7 +279,11 @@ export default function App() {
       await addDoctor(newDoc);
       // Re-fetch database state to ensure perfect consistency
       const refreshedDocs = await getDoctors();
-      setDoctors(refreshedDocs);
+      if (refreshedDocs && refreshedDocs.length > 0) {
+        setDoctors(refreshedDocs);
+      } else {
+        setDoctors((prev) => [newDoc, ...prev]);
+      }
     } catch (err) {
       console.error('Failed to add doctor:', err);
       // Client-side fallback if offline
@@ -291,11 +295,23 @@ export default function App() {
     try {
       await updateDoctor(updatedDoc);
       const refreshedDocs = await getDoctors();
-      setDoctors(refreshedDocs);
+      if (refreshedDocs && refreshedDocs.length > 0) {
+        setDoctors(refreshedDocs);
+      } else {
+        setDoctors((prev) => prev.map((d) => {
+          const dDocId = (d.doctorId || d.id || '').split('::')[0];
+          const uDocId = (updatedDoc.doctorId || updatedDoc.id || '').split('::')[0];
+          return (dDocId === uDocId || d.id === updatedDoc.id) ? { ...d, ...updatedDoc } : d;
+        }));
+      }
     } catch (err) {
       console.error('Failed to update doctor:', err);
       // Client-side fallback if offline
-      setDoctors((prev) => prev.map((d) => (d.id === updatedDoc.id ? updatedDoc : d)));
+      setDoctors((prev) => prev.map((d) => {
+        const dDocId = (d.doctorId || d.id || '').split('::')[0];
+        const uDocId = (updatedDoc.doctorId || updatedDoc.id || '').split('::')[0];
+        return (dDocId === uDocId || d.id === updatedDoc.id) ? { ...d, ...updatedDoc } : d;
+      }));
     }
   };
 
@@ -303,7 +319,9 @@ export default function App() {
     try {
       await deleteDoctor(id);
       const refreshedDocs = await getDoctors();
-      setDoctors(refreshedDocs);
+      if (refreshedDocs) {
+        setDoctors(refreshedDocs);
+      }
     } catch (err) {
       console.error('Failed to delete doctor:', err);
       // Client-side fallback if offline

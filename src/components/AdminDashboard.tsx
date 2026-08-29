@@ -797,12 +797,19 @@ export default function AdminDashboard({
         chambers: resolvedChambers
       };
       await upsertDoctorWithChambers(doctorPayload, resolvedChambers);
-      setToastMsg(editingDoctor || doctors.some(d => d.id === doctorPayload.id) ? 'চিকিৎসক তথ্য আপডেট করা হয়েছে' : 'নতুন চিকিৎসক সফলভাবে নিবন্ধিত হয়েছে');
       
-      if (doctors.some(d => d.id === doctorPayload.id)) {
-        onUpdateDoctor(doctorPayload);
+      const isExisting = editingDoctor || doctors.some(d => {
+        const dDocId = (d.doctorId || d.id || '').split('::')[0];
+        const pDocId = (doctorPayload.doctorId || doctorPayload.id || '').split('::')[0];
+        return dDocId === pDocId || d.id === doctorPayload.id;
+      });
+
+      setToastMsg(isExisting ? 'চিকিৎসকের প্রোফাইল ও চেম্বার তথ্য সফলভাবে আপডেট হয়েছে' : 'নতুন চিকিৎসক সফলভাবে নিবন্ধিত হয়েছে');
+      
+      if (isExisting) {
+        await onUpdateDoctor(doctorPayload);
       } else {
-        onAddDoctor(doctorPayload);
+        await onAddDoctor(doctorPayload);
       }
       
       setShowDoctorModal(false);

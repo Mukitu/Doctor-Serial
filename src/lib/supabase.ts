@@ -864,104 +864,69 @@ export async function addDoctor(doc: Doctor): Promise<void> {
 }
 
 export async function updateDoctor(doc: Doctor): Promise<void> {
-  const doctors = await getDoctors();
-  const updated = doctors.map(d => d.id === doc.id ? doc : d);
-  localStorage.setItem('sheba_doctors_v3', JSON.stringify(updated));
-
-  if (!isSupabaseConfigured || !supabase) {
-    return;
-  }
-
-  try {
-    const [docId, chId] = doc.id.split('::');
-
-    // 1. Update doctor info
-    const updatePayload: any = {
-      specialty_id: doc.specialtyId,
-      name: doc.name,
-      bmdc_number: doc.bmdc,
-      degrees: doc.degrees,
-      designation: doc.designation,
-      workplace: doc.workplace,
-      ps_phone: doc.psPhone || null,
-      photo_url: doc.photoUrl || '',
-      display_priority: doc.priorityIndex,
-      is_active: doc.isActive,
-      rating: doc.rating || 5.0,
-      review_count: doc.reviewCount || 0
-    };
-
-    if (doc.about !== undefined) {
-      updatePayload.about = doc.about;
-    }
-
-    const { error: docError } = await supabase
-      .from('doctors')
-      .update(updatePayload)
-      .eq('id', docId);
-
-    if (docError) {
-      if (docError.message?.includes('about') || docError.message?.includes('column')) {
-        delete updatePayload.about;
-        const { error: retryError } = await supabase.from('doctors').update(updatePayload).eq('id', docId);
-        if (retryError) throw retryError;
-      } else {
-        throw docError;
-      }
-    }
-
-    // 2. Update chamber info
-    if (chId) {
-      const { error: chError } = await supabase
-        .from('chambers')
-        .update({
-          facility_id: doc.facilityId,
-          room_no: doc.chamberRoomNo,
+  // Delegate directly to upsertDoctorWithChambers for comprehensive sync
+  const resolvedChambers = doc.chambers && doc.chambers.length > 0
+    ? doc.chambers
+    : [
+        {
+          id: doc.chamberId || '',
+          facilityId: doc.facilityId || '',
+          facilityName: doc.facilityName || doc.facility || '',
+          facilityAddress: doc.facilityAddress || doc.chamberAddress || '',
+          roomNo: doc.chamberRoomNo || '',
           floor: doc.chamberFloor || 'নিচতলা',
-          building_stand: doc.chamberBuildingStand || 'মেইন বিল্ডিং',
-          visiting_days: doc.visitingDays.join(', '),
-          visiting_time: doc.visitingTime,
-          fee_new: doc.feesNew,
-          fee_old: doc.feesOld
-        })
-        .eq('id', chId);
+          buildingStand: doc.chamberBuildingStand || 'মেইন বিল্ডিং',
+          visitingDays: doc.visitingDays || ['সবদিন'],
+          visitingTime: doc.visitingTime || '',
+          feeNew: doc.feesNew || 0,
+          feeOld: doc.feesOld || 0
+        }
+      ];
 
-      if (chError) throw chError;
-    }
-  } catch (err) {
-    console.error('Error updating doctor in Supabase:', err);
-  }
+  await upsertDoctorWithChambers(doc, resolvedChambers);
 }
 
 export async function deleteDoctor(id: string): Promise<void> {
   const doctors = await getDoctors();
+  const rawId = id.split('::')[0];
+  const filtered = doctors.filter(d => {
+    const dId = (d.doctorId || d.id || '').split('::')[0];
+    return dId !== rawId && d.id !== id;
+  });
+  localStorage.setItem('sheba_doctors_v3', JSON.stringify(filtered));
+
   if (!isSupabaseConfigured || !supabase) {
-    const filtered = doctors.filter(d => d.id !== id);
-    localStorage.setItem('sheba_doctors_v3', JSON.stringify(filtered));
     return;
   }
 
   try {
-    const docId = id.split('::')[0];
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    if (!uuidRegex.test(docId)) {
-      console.warn('Skipping Supabase doctor delete for non-UUID ID:', docId);
-      return;
+    let targetDocId = uuidRegex.test(rawId) ? rawId : null;
+
+    if (!targetDocId && uuidRegex.test(rawId)) {
+      const { data } = await supabase.from('doctors').select('id').eq('id', rawId).maybeSingle();
+      if (data?.id) targetDocId = data.id;
     }
-    const { error } = await supabase
-      .from('doctors')
-      .delete()
-      .eq('id', docId);
-    if (error) throw error;
+
+    if (targetDocId) {
+      const { error } = await supabase
+        .from('doctors')
+        .delete()
+        .eq('id', targetDocId);
+      if (error) console.warn('Supabase doctor delete notice:', error.message);
+    }
   } catch (err) {
     console.error('Error deleting doctor:', err);
-    throw err;
   }
 }
 
 export async function updateDoctorStatus(id: string, isActive: boolean): Promise<void> {
+  const rawId = id.split('::')[0];
   const doctors = await getDoctors();
-  const updated = doctors.map(d => d.id === id ? { ...d, isActive } : d);
+  const updated = doctors.map(d => {
+    const dId = (d.doctorId || d.id || '').split('::')[0];
+    return dId === rawId || d.id === id ? { ...d, isActive } : d;
+  });
   localStorage.setItem('sheba_doctors_v3', JSON.stringify(updated));
 
   if (!isSupabaseConfigured || !supabase) {
@@ -969,20 +934,23 @@ export async function updateDoctorStatus(id: string, isActive: boolean): Promise
   }
 
   try {
-    const docId = id.split('::')[0];
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    if (!uuidRegex.test(docId)) {
-      console.warn('Skipping Supabase doctor status update for non-UUID ID:', docId);
-      return;
+    let targetDocId = uuidRegex.test(rawId) ? rawId : null;
+
+    if (!targetDocId && uuidRegex.test(rawId)) {
+      const { data } = await supabase.from('doctors').select('id').eq('id', rawId).maybeSingle();
+      if (data?.id) targetDocId = data.id;
     }
-    const { error } = await supabase
-      .from('doctors')
-      .update({ is_active: isActive })
-      .eq('id', docId);
-    if (error) throw error;
+
+    if (targetDocId) {
+      const { error } = await supabase
+        .from('doctors')
+        .update({ is_active: isActive })
+        .eq('id', targetDocId);
+      if (error) console.warn('Supabase doctor status update notice:', error.message);
+    }
   } catch (err) {
     console.error('Error updating doctor status in Supabase:', err);
-    throw err;
   }
 }
 
@@ -992,204 +960,307 @@ export async function upsertDoctorWithChambers(
 ): Promise<void> {
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const rawId = (doctor.doctorId || doctor.id || '').split('::')[0];
-  const isEdit = !!rawId && uuidRegex.test(rawId);
-  const doctorId = isEdit ? rawId : crypto.randomUUID();
 
-  // Prepare doctor record
-  const docPayload = {
-    id: doctorId,
-    specialty_id: doctor.specialtyId && uuidRegex.test(doctor.specialtyId) ? doctor.specialtyId : null,
-    name: doctor.name,
-    bmdc_number: doctor.bmdc || '',
-    degrees: doctor.degrees,
-    designation: doctor.designation,
-    workplace: doctor.workplace,
-    ps_phone: doctor.psPhone || null,
-    photo_url: doctor.photoUrl || '',
-    display_priority: doctor.priorityIndex || 10,
-    is_active: doctor.isActive !== false,
-    rating: doctor.rating || 5.0,
-    review_count: doctor.reviewCount || 0,
-    about: doctor.about || ''
+  // Resolve specialty object for naming
+  let resolvedSpecialtyNameBn = doctor.specialtyNameBn || doctor.specialty || 'মেডিসিন';
+  let resolvedSpecialtyNameEn = doctor.specialtyNameEn || '';
+  let resolvedSpecialtyId = doctor.specialtyId || doctor.specialty_id || null;
+
+  // 1. Process Chambers array for both LocalStorage and Supabase
+  const primaryChamber = chambers && chambers.length > 0 ? chambers[0] : null;
+  const resolvedChambersList = (chambers && chambers.length > 0 ? chambers : [
+    {
+      id: doctor.chamberId || '',
+      facilityId: doctor.facilityId || '',
+      facilityName: doctor.facilityName || doctor.facility || '',
+      facilityAddress: doctor.facilityAddress || doctor.chamberAddress || '',
+      roomNo: doctor.chamberRoomNo || '',
+      floor: doctor.chamberFloor || 'নিচতলা',
+      buildingStand: doctor.chamberBuildingStand || 'মেইন বিল্ডিং',
+      visitingDays: doctor.visitingDays || ['সবদিন'],
+      visitingTime: doctor.visitingTime || '',
+      feeNew: doctor.feesNew || 0,
+      feeOld: doctor.feesOld || 0
+    }
+  ]).map((ch: any, idx: number) => {
+    let daysArr: string[] = ['সবদিন'];
+    if (Array.isArray(ch.visitingDays) && ch.visitingDays.length > 0) {
+      daysArr = ch.visitingDays;
+    } else if (Array.isArray(ch.visiting_days) && ch.visiting_days.length > 0) {
+      daysArr = ch.visiting_days;
+    } else if (typeof ch.visitingDays === 'string' && ch.visitingDays.trim()) {
+      daysArr = ch.visitingDays.split(',').map((d: string) => d.trim());
+    } else if (typeof ch.visiting_days === 'string' && ch.visiting_days.trim()) {
+      daysArr = ch.visiting_days.split(',').map((d: string) => d.trim());
+    }
+
+    const chId = ch.id || ch.chamberId || `ch-${Date.now()}-${idx}`;
+
+    return {
+      id: chId,
+      doctorId: rawId || '',
+      facilityId: ch.facilityId || ch.facility_id || '',
+      facilityName: ch.facilityName || ch.facility || '',
+      facilityAddress: ch.facilityAddress || ch.chamberAddress || '',
+      facilityDistrictId: ch.facilityDistrictId || '',
+      roomNo: ch.roomNo || ch.room_no || '',
+      floor: ch.floor || 'নিচতলা',
+      buildingStand: ch.buildingStand || ch.building_stand || ch.building_info || 'মেইন বিল্ডিং',
+      visitingDays: daysArr,
+      visitingTime: ch.visitingTime || ch.visiting_time || '',
+      feeNew: Number(ch.feeNew ?? ch.fee_new ?? 0),
+      feeOld: Number(ch.feeOld ?? ch.fee_old ?? 0)
+    };
+  });
+
+  const firstChamber: any = resolvedChambersList[0] || {};
+
+  // Build the complete unified Doctor object
+  const unifiedDoctor: Doctor = {
+    id: rawId || (resolvedChambersList[0]?.id ? `${rawId || 'doc'}::${resolvedChambersList[0].id}` : `doc-${Date.now()}`),
+    doctorId: rawId || `doc-${Date.now()}`,
+    specialtyId: resolvedSpecialtyId || '',
+    specialtyNameBn: resolvedSpecialtyNameBn,
+    specialtyNameEn: resolvedSpecialtyNameEn,
+    specialty: resolvedSpecialtyNameBn,
+    name: doctor.name || '',
+    bmdc: doctor.bmdc || doctor.bmdc_number || '',
+    degrees: doctor.degrees || '',
+    designation: doctor.designation || '',
+    workplace: doctor.workplace || '',
+    about: doctor.about || doctor.biography || '',
+    psPhone: doctor.psPhone || doctor.ps_phone || '',
+    photoUrl: doctor.photoUrl || doctor.photo_url || '',
+    priorityIndex: Number(doctor.priorityIndex ?? doctor.display_priority ?? 10),
+    isActive: doctor.isActive !== false && doctor.is_active !== false,
+    rating: doctor.rating != null ? Number(doctor.rating) : 5.0,
+    reviewCount: Number(doctor.reviewCount ?? doctor.review_count ?? 0),
+    
+    // Flat primary chamber fields
+    chamberId: firstChamber.id || '',
+    facilityId: firstChamber.facilityId || '',
+    facilityName: firstChamber.facilityName || '',
+    facilityAddress: firstChamber.facilityAddress || '',
+    facilityDistrictId: firstChamber.facilityDistrictId || '',
+    facility: firstChamber.facilityName || '',
+    chamberAddress: firstChamber.facilityAddress || '',
+    chamberRoomNo: firstChamber.roomNo || '',
+    chamberFloor: firstChamber.floor || 'নিচতলা',
+    chamberBuildingStand: firstChamber.buildingStand || 'মেইন বিল্ডিং',
+    visitingDays: firstChamber.visitingDays || ['সবদিন'],
+    visitingTime: firstChamber.visitingTime || '',
+    feesNew: firstChamber.feeNew || 0,
+    feesOld: firstChamber.feeOld || 0,
+    chambers: resolvedChambersList
   };
 
-  // Local Storage Fallback Sync
-  if (!isSupabaseConfigured || !supabase) {
-    const doctors = await getDoctors();
-    const baseFiltered = doctors.filter(d => d.doctorId !== doctorId);
+  // Always update LocalStorage cache immediately for responsive instant feedback
+  try {
+    const existingDoctors = await getDoctors();
+    const filteredDoctors = existingDoctors.filter(d => {
+      const dDocId = (d.doctorId || d.id || '').split('::')[0];
+      const targetId = (unifiedDoctor.doctorId || unifiedDoctor.id || '').split('::')[0];
+      return dDocId !== targetId && d.id !== unifiedDoctor.id && (rawId ? dDocId !== rawId : true);
+    });
+    localStorage.setItem('sheba_doctors_v3', JSON.stringify([unifiedDoctor, ...filteredDoctors]));
+  } catch (localErr) {
+    console.warn('LocalStorage doctors sync warning:', localErr);
+  }
 
-    if (chambers.length === 0) {
-      const flattened: Doctor = {
-        id: `${doctorId}::standalone`,
-        doctorId: doctorId,
-        specialtyId: doctor.specialtyId,
-        specialtyNameBn: doctor.specialty || '',
-        specialtyNameEn: '',
-        specialty: doctor.specialty || 'মেডিসিন',
-        facility: 'চেম্বার তথ্য যুক্ত করা হয়নি',
-        chamberAddress: '',
-        name: doctor.name,
-        bmdc: doctor.bmdc || '',
-        degrees: doctor.degrees,
-        designation: doctor.designation,
-        workplace: doctor.workplace,
-        about: doctor.about || '',
-        psPhone: doctor.psPhone || '',
-        photoUrl: doctor.photoUrl || '',
-        priorityIndex: doctor.priorityIndex || 10,
-        isActive: doctor.isActive !== false,
-        rating: doctor.rating || 5.0,
-        reviewCount: doctor.reviewCount || 0,
-        chamberId: '',
-        facilityId: '',
-        facilityName: '',
-        facilityAddress: '',
-        facilityDistrictId: '',
-        chamberRoomNo: '',
-        chamberFloor: 'নিচতলা',
-        chamberBuildingStand: 'মেইন বিল্ডিং',
-        visitingDays: [],
-        visitingTime: '',
-        feesNew: 0,
-        feesOld: 0
-      };
-      localStorage.setItem('sheba_doctors_v3', JSON.stringify([flattened, ...baseFiltered]));
-    } else {
-      const newFlattenedList: Doctor[] = chambers.map(ch => {
-        const chamberId = ch.id || `ch-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
-        return {
-          id: `${doctorId}::${chamberId}`,
-          doctorId: doctorId,
-          specialtyId: doctor.specialtyId,
-          specialtyNameBn: doctor.specialty || '',
-          specialtyNameEn: '',
-          specialty: doctor.specialty || 'মেডিসিন',
-          facility: ch.facilityName || '',
-          chamberAddress: ch.facilityAddress || '',
-          name: doctor.name,
-          bmdc: doctor.bmdc || '',
-          degrees: doctor.degrees,
-          designation: doctor.designation,
-          workplace: doctor.workplace,
-          about: doctor.about || '',
-          psPhone: doctor.psPhone || '',
-          photoUrl: doctor.photoUrl || '',
-          priorityIndex: doctor.priorityIndex || 10,
-          isActive: doctor.isActive !== false,
-          rating: doctor.rating || 5.0,
-          reviewCount: doctor.reviewCount || 0,
-          
-          chamberId: chamberId,
-          facilityId: ch.facilityId,
-          facilityName: ch.facilityName || '',
-          facilityAddress: ch.facilityAddress || '',
-          facilityDistrictId: ch.facilityDistrictId || '',
-          chamberRoomNo: ch.roomNo || '',
-          chamberFloor: ch.floor || 'নিচতলা',
-          chamberBuildingStand: ch.buildingStand || 'মেইন বিল্ডিং',
-          visitingDays: ch.visitingDays || [],
-          visitingTime: ch.visitingTime || '',
-          feesNew: ch.feeNew || 0,
-          feesOld: ch.feeOld || 0
-        };
-      });
-      localStorage.setItem('sheba_doctors_v3', JSON.stringify([...newFlattenedList, ...baseFiltered]));
-    }
+  // 2. Persist to Supabase if configured
+  if (!isSupabaseConfigured || !supabase) {
     return;
   }
 
   try {
-    // 2. Perform DB Upsert
-    if (isEdit) {
-      const { error: docError } = await supabase
-        .from('doctors')
-        .update(docPayload)
-        .eq('id', doctorId);
-      if (docError) throw docError;
-    } else {
-      const { error: docError } = await supabase
-        .from('doctors')
-        .insert(docPayload);
-      if (docError) throw docError;
+    // Determine existing or new target ID in Supabase
+    let targetDocId: string | null = (rawId && uuidRegex.test(rawId)) ? rawId : null;
+
+    if (!targetDocId && rawId && uuidRegex.test(rawId)) {
+      // Check if this ID exists in Supabase
+      const { data: existingById } = await supabase.from('doctors').select('id').eq('id', rawId).maybeSingle();
+      if (existingById?.id) {
+        targetDocId = existingById.id;
+      }
     }
 
-    // 3. Sync chambers table (Step 2: Delete stale chambers for doctor, Step 3: Insert current chambers)
-    const { error: delChError } = await supabase
-      .from('chambers')
-      .delete()
-      .eq('doctor_id', doctorId);
-
-    if (delChError) {
-      console.warn('[Supabase] Delete chambers notice:', delChError.message);
+    if (!targetDocId && doctor.bmdc) {
+      // Check by BMDC number
+      const { data: existingByBmdc } = await supabase.from('doctors').select('id').eq('bmdc_number', doctor.bmdc).maybeSingle();
+      if (existingByBmdc?.id) {
+        targetDocId = existingByBmdc.id;
+      }
     }
 
-    // Fetch facilities list to resolve facility IDs by name or existing ID mapping if needed
-    let dbFacilities: any[] = [];
+    if (!targetDocId && doctor.name) {
+      // Check by Name
+      const { data: existingByName } = await supabase.from('doctors').select('id').eq('name', doctor.name).maybeSingle();
+      if (existingByName?.id) {
+        targetDocId = existingByName.id;
+      }
+    }
+
+    const isNew = !targetDocId;
+    if (isNew) {
+      targetDocId = crypto.randomUUID();
+    }
+
+    // Fetch specialties in Supabase to resolve valid specialty_id
+    let dbSpecialties: any[] = [];
     try {
-      const { data: facs } = await supabase.from('facilities').select('id, name');
-      if (facs) dbFacilities = facs;
+      const { data: specs } = await supabase.from('specialties').select('id, name_bn, name_en');
+      if (specs) dbSpecialties = specs;
     } catch {
       // Non-fatal
     }
 
-    const chamberRecords = chambers.map((ch: any) => {
-      const rawChId = ch.id || ch.chamberId || '';
-      const cleanChId = rawChId.includes('::') ? rawChId.split('::')[1] : rawChId;
-      const validChId = cleanChId && uuidRegex.test(cleanChId) ? cleanChId : crypto.randomUUID();
-      
-      let rawFacId = ch.facilityId || ch.facility_id;
-      if (!rawFacId && (ch.facilityName || ch.facility)) {
-        const facNameTarget = ch.facilityName || ch.facility;
-        const matched = dbFacilities.find(f => f.name === facNameTarget);
-        if (matched) rawFacId = matched.id;
-      }
+    let finalSpecialtyId: string | null = null;
+    if (resolvedSpecialtyId && dbSpecialties.some(s => s.id === resolvedSpecialtyId)) {
+      finalSpecialtyId = resolvedSpecialtyId;
+    } else if (resolvedSpecialtyNameBn && dbSpecialties.length > 0) {
+      const matchedSpec = dbSpecialties.find(s => s.name_bn === resolvedSpecialtyNameBn || s.name_en === resolvedSpecialtyNameEn);
+      if (matchedSpec) finalSpecialtyId = matchedSpec.id;
+    }
 
-      // If rawFacId exists, check if there is a matching facility in dbFacilities (in case ID format needs resolution)
-      let resolvedFacId = rawFacId;
-      if (rawFacId && dbFacilities.length > 0) {
-        const matchedById = dbFacilities.find(f => f.id === rawFacId);
-        const matchedByName = dbFacilities.find(f => f.name === ch.facilityName || f.name === ch.facility);
-        if (matchedById) {
-          resolvedFacId = matchedById.id;
-        } else if (matchedByName) {
-          resolvedFacId = matchedByName.id;
+    // Prepare doctor DB payload
+    const docPayload: any = {
+      name: doctor.name.trim(),
+      bmdc_number: doctor.bmdc?.trim() || doctor.bmdc_number?.trim() || '',
+      degrees: doctor.degrees?.trim() || '',
+      designation: doctor.designation?.trim() || '',
+      workplace: doctor.workplace?.trim() || '',
+      ps_phone: doctor.psPhone?.trim() || doctor.ps_phone?.trim() || null,
+      photo_url: doctor.photoUrl?.trim() || doctor.photo_url?.trim() || '',
+      display_priority: Number(doctor.priorityIndex ?? doctor.display_priority ?? 10),
+      is_active: doctor.isActive !== false && doctor.is_active !== false,
+      rating: doctor.rating != null ? Number(doctor.rating) : 5.0,
+      review_count: Number(doctor.reviewCount ?? doctor.review_count ?? 0),
+      specialty_id: finalSpecialtyId
+    };
+
+    if (doctor.about !== undefined) {
+      docPayload.about = doctor.about;
+    }
+
+    // Upsert Doctor profile
+    if (!isNew && targetDocId) {
+      const { error: updateErr } = await supabase
+        .from('doctors')
+        .update(docPayload)
+        .eq('id', targetDocId);
+
+      if (updateErr) {
+        if (updateErr.message?.includes('about') || updateErr.message?.includes('column')) {
+          delete docPayload.about;
+          const { error: retryUpdateErr } = await supabase
+            .from('doctors')
+            .update(docPayload)
+            .eq('id', targetDocId);
+          if (retryUpdateErr) throw retryUpdateErr;
+        } else if (updateErr.message?.includes('specialty_id')) {
+          docPayload.specialty_id = null;
+          const { error: retrySpecErr } = await supabase
+            .from('doctors')
+            .update(docPayload)
+            .eq('id', targetDocId);
+          if (retrySpecErr) throw retrySpecErr;
+        } else {
+          throw updateErr;
         }
       }
+    } else {
+      const insertPayload = { id: targetDocId, ...docPayload };
+      const { error: insertErr } = await supabase
+        .from('doctors')
+        .insert(insertPayload);
 
-      let daysStr = '';
-      if (Array.isArray(ch.visitingDays)) {
-        daysStr = ch.visitingDays.join(', ');
-      } else if (Array.isArray(ch.visiting_days)) {
-        daysStr = ch.visiting_days.join(', ');
-      } else {
-        daysStr = ch.visitingDays || ch.visiting_days || '';
+      if (insertErr) {
+        if (insertErr.message?.includes('about') || insertErr.message?.includes('column')) {
+          delete insertPayload.about;
+          const { error: retryInsertErr } = await supabase
+            .from('doctors')
+            .insert(insertPayload);
+          if (retryInsertErr) throw retryInsertErr;
+        } else if (insertErr.message?.includes('specialty_id')) {
+          insertPayload.specialty_id = null;
+          const { error: retrySpecErr } = await supabase
+            .from('doctors')
+            .insert(insertPayload);
+          if (retrySpecErr) throw retrySpecErr;
+        } else {
+          throw insertErr;
+        }
+      }
+    }
+
+    // 3. Sync chambers table for doctor
+    if (targetDocId) {
+      // Delete old chambers
+      const { error: delChErr } = await supabase
+        .from('chambers')
+        .delete()
+        .eq('doctor_id', targetDocId);
+
+      if (delChErr) {
+        console.warn('[Supabase] Delete chambers notice:', delChErr.message);
       }
 
-      return {
-        id: validChId,
-        doctor_id: doctorId,
-        facility_id: resolvedFacId || null,
-        room_no: ch.roomNo || ch.room_no || '',
-        floor: ch.floor || (ch as any).floor || '',
-        building_info: ch.buildingStand || ch.building_info || '',
-        building_stand: ch.buildingStand || ch.building_info || '',
-        visiting_days: daysStr,
-        visiting_time: ch.visitingTime || ch.visiting_time || '',
-        fee_new: Number(ch.feeNew ?? ch.fee_new ?? 0),
-        fee_old: Number(ch.feeOld ?? ch.fee_old ?? 0)
-      };
-    });
+      // Fetch facilities for ID resolution
+      let dbFacilities: any[] = [];
+      try {
+        const { data: facs } = await supabase.from('facilities').select('id, name');
+        if (facs) dbFacilities = facs;
+      } catch {
+        // Non-fatal
+      }
 
-    if (chamberRecords.length > 0) {
-      const { error: insChError } = await supabase
-        .from('chambers')
-        .insert(chamberRecords);
+      const chamberRecords = resolvedChambersList.map((ch: any) => {
+        const cleanChId = (ch.id || '').includes('::') ? ch.id.split('::')[1] : ch.id;
+        const validChId = cleanChId && uuidRegex.test(cleanChId) ? cleanChId : crypto.randomUUID();
 
-      if (insChError) {
-        console.error('[Supabase] Primary chamber insert failed, retrying without explicit ID:', insChError.message);
-        const recordsWithoutId = chamberRecords.map(({ id, ...rest }) => rest);
-        const { error: retryErr } = await supabase.from('chambers').insert(recordsWithoutId);
-        if (retryErr) throw retryErr;
+        let resolvedFacId = ch.facilityId || ch.facility_id;
+        if (dbFacilities.length > 0) {
+          const matchedById = dbFacilities.find(f => f.id === resolvedFacId);
+          const matchedByName = dbFacilities.find(f => f.name === ch.facilityName || f.name === ch.facility);
+          if (matchedById) {
+            resolvedFacId = matchedById.id;
+          } else if (matchedByName) {
+            resolvedFacId = matchedByName.id;
+          }
+        }
+
+        const daysStr = Array.isArray(ch.visitingDays) 
+          ? ch.visitingDays.join(', ') 
+          : (ch.visitingDays || ch.visiting_days || 'সবদিন');
+
+        return {
+          id: validChId,
+          doctor_id: targetDocId,
+          facility_id: resolvedFacId || null,
+          room_no: ch.roomNo || ch.room_no || '',
+          floor: ch.floor || 'নিচতলা',
+          building_info: ch.buildingStand || ch.building_info || 'মেইন বিল্ডিং',
+          building_stand: ch.buildingStand || ch.building_info || 'মেইন বিল্ডিং',
+          visiting_days: daysStr,
+          visiting_time: ch.visitingTime || ch.visiting_time || '',
+          fee_new: Number(ch.feeNew ?? ch.fee_new ?? 0),
+          fee_old: Number(ch.feeOld ?? ch.fee_old ?? 0)
+        };
+      });
+
+      if (chamberRecords.length > 0) {
+        const { error: insChError } = await supabase
+          .from('chambers')
+          .insert(chamberRecords);
+
+        if (insChError) {
+          console.warn('[Supabase] Chamber insert notice, retrying without explicit ID:', insChError.message);
+          const recordsWithoutId = chamberRecords.map(({ id, ...rest }) => rest);
+          const { error: retryErr } = await supabase.from('chambers').insert(recordsWithoutId);
+          if (retryErr) {
+            console.error('[Supabase] Chamber insert retry failed:', retryErr.message);
+          }
+        }
       }
     }
   } catch (err) {

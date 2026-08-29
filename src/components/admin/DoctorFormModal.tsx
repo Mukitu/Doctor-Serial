@@ -551,23 +551,47 @@ export default function DoctorFormModal({
     }
 
     const matchedSpecialty = specialties.find(s => s.id === specialtyId);
+    const primaryChamber = processedChambers[0] || {};
 
     const doctorPayload = {
-      id: doctor?.id || undefined, // Empty triggers create with randomUUID
+      id: doctor?.id || doctor?.doctorId || undefined,
+      doctorId: doctor?.doctorId || doctor?.id || undefined,
       name: name.trim(),
       bmdc: bmdc.trim(),
+      bmdc_number: bmdc.trim(),
       specialtyId: specialtyId,
-      specialty: matchedSpecialty?.nameBn || 'মেডিসিন',
+      specialty_id: specialtyId,
+      specialty: matchedSpecialty?.nameBn || doctor?.specialty || 'মেডিসিন',
+      specialtyNameBn: matchedSpecialty?.nameBn || doctor?.specialty || 'মেডিসিন',
+      specialtyNameEn: matchedSpecialty?.nameEn || '',
       degrees: degrees.trim(),
       designation: designation.trim(),
       workplace: workplace.trim(),
       about: about.trim(),
+      biography: about.trim(),
       photoUrl: photoUrl.trim(),
+      photo_url: photoUrl.trim(),
       psPhone: psPhone.trim() || undefined,
+      ps_phone: psPhone.trim() || undefined,
       priorityIndex: cleanNumberInput(priorityIndex) || 10,
+      display_priority: cleanNumberInput(priorityIndex) || 10,
       rating: parseFloat(rating) || 5.0,
       reviewCount: parseInt(reviewCount) || 0,
-      isActive: isActive
+      isActive: isActive,
+      is_active: isActive,
+
+      // Flat chamber properties
+      facility: primaryChamber.facilityName || '',
+      facilityName: primaryChamber.facilityName || '',
+      facilityAddress: primaryChamber.facilityAddress || '',
+      chamberRoomNo: primaryChamber.roomNo || '',
+      chamberFloor: primaryChamber.floor || 'নিচতলা',
+      chamberBuildingStand: primaryChamber.buildingStand || 'মেইন বিল্ডিং',
+      visitingDays: primaryChamber.visitingDays || [],
+      visitingTime: primaryChamber.visitingTime || '',
+      feesNew: primaryChamber.feeNew || 0,
+      feesOld: primaryChamber.feeOld || 0,
+      chambers: processedChambers
     };
 
     setIsSubmitting(true);
