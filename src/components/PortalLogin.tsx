@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { HeartPulse, KeyRound, Mail, AlertCircle, Loader2 } from 'lucide-react';
+import brandLogo from '@/app/about/MyDocBD-Logo.png';
+import { KeyRound, Mail, AlertCircle, Loader2 } from 'lucide-react';
 import { AdminProfile } from '../types';
 import { signIn } from '../lib/supabase';
 
@@ -48,11 +49,13 @@ export default function PortalLogin({ onLoginSuccess }: PortalLoginProps) {
     <div className="flex min-h-[80vh] items-center justify-center px-4 py-12 sm:px-6 lg:px-8 bg-slate-50">
       <div className="w-full max-w-md space-y-8 rounded-xl border border-slate-200 bg-white p-8 shadow-sm">
         {/* Branding & Logo header */}
-        <div className="text-center">
-          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-sky-600 text-white shadow-md shadow-sky-100">
-            <HeartPulse className="h-6 w-6" />
-          </div>
-          <h2 className="mt-4 text-xl font-black text-slate-900 tracking-tight">
+        <div className="text-center flex flex-col items-center">
+          <img 
+            src="/MyDocBD-Logo.png" 
+            alt="MyDocBD Brand Logo" 
+            className="h-12 w-auto object-contain mx-auto mb-2" 
+          />
+          <h2 className="mt-2 text-xl font-black text-slate-900 tracking-tight">
             MyDocBD Admin Portal - লগইন করুন
           </h2>
           <p className="mt-1.5 text-xs font-bold text-slate-400">

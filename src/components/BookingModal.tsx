@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import appIcon from '@/app/about/MyDocBD-App-Icon.png';
 import { 
   X, 
   Calendar, 
@@ -219,10 +220,14 @@ export default function BookingModal({
           <div>
             {/* Header / Doctor Info */}
             <div className="border-b border-slate-200 pb-4 pr-8">
-              <span className="inline-flex rounded-md bg-[#0284C7]/10 px-2.5 py-0.5 text-[10px] font-bold text-[#0284C7] border border-[#0284C7]/20">
-                {doctor.specialtyNameBn || doctor.specialty || 'মেডিসিন'}
-              </span>
-              <h2 className="text-lg font-bold text-slate-800 mt-1" id="modal-doctor-name">
+              <div className="flex items-center gap-2 mb-1.5">
+                <img src="/MyDocBD-App-Icon.png" alt="MyDocBD App Icon" className="h-6 w-6 object-contain rounded" />
+                <span className="text-xs font-black text-[#0284C7] uppercase tracking-wider">সিরিয়াল বুকিং</span>
+                <span className="inline-flex rounded-md bg-[#0284C7]/10 px-2.5 py-0.5 text-[10px] font-bold text-[#0284C7] border border-[#0284C7]/20 ml-auto">
+                  {doctor.specialtyNameBn || doctor.specialty || 'মেডিসিন'}
+                </span>
+              </div>
+              <h2 className="text-lg font-bold text-slate-800" id="modal-doctor-name">
                 {doctor.name}
               </h2>
               <p className="text-xs font-bold text-slate-500 mt-0.5">

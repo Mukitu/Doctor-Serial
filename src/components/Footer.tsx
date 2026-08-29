@@ -1,5 +1,6 @@
 import React from 'react';
-import { HeartPulse, ShieldCheck, PhoneCall } from 'lucide-react';
+import { ShieldCheck, PhoneCall } from 'lucide-react';
+import brandLogo from '@/app/about/MyDocBD-Logo.png';
 import { ActiveTab } from '../types';
 
 interface FooterProps {
@@ -19,16 +20,15 @@ export default function Footer({ activeTab, setActiveTab }: FooterProps) {
         <div className="grid gap-8 md:grid-cols-4">
           {/* Logo and Brand Info */}
           <div className="md:col-span-1 space-y-3">
-            <div className="flex items-center gap-2">
-              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-sky-600 text-white">
-                <HeartPulse className="h-5 w-5" />
-              </div>
-              <span className="text-lg font-black text-white">
-                MyDoc<span className="text-teal-400">BD</span>
-              </span>
+            <div className="inline-block bg-white px-3 py-1.5 rounded-xl border border-slate-100 shadow-sm mb-3">
+              <img 
+                src="/MyDocBD-Logo.png" 
+                alt="MyDocBD Logo" 
+                className="h-8 md:h-9 w-auto object-contain" 
+              />
             </div>
             <p className="text-xs text-slate-400 leading-relaxed font-semibold">
-              MyDocBD (mydocbd.com) — স্বাস্থ্যসেবাকে সহজ, প্রযুক্তিবান্ধব ও নির্ভরযোগ্য করার একটি ডিজিটাল উদ্যোগ।
+              দেশের সেরা বিশেষজ্ঞ চিকিৎসকদের ডিজিটাল ডিরেক্টরি ও সিরিয়াল বুকিং প্ল্যাটফর্ম।
             </p>
             <div className="flex items-center gap-1.5 text-teal-400 text-[10px] font-bold">
               <ShieldCheck className="h-4 w-4" />

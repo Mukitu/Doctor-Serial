@@ -1,4 +1,6 @@
 import React from 'react';
+import brandLogo from '@/app/about/MyDocBD-Logo.png';
+import appIcon from '@/app/about/MyDocBD-App-Icon.png';
 import { 
   LayoutDashboard, 
   CalendarCheck, 
@@ -6,7 +8,7 @@ import {
   Building2, 
   Map, 
   FileText, 
-  Image, 
+  Image as ImageIcon, 
   LogOut, 
   UserCheck, 
   Radio 
@@ -91,7 +93,7 @@ export default function AdminSidebar({
     {
       id: 'banners',
       label: 'প্রোমো ব্যানার ও এডস',
-      icon: Image,
+      icon: ImageIcon,
       badge: null
     }
   ];
@@ -100,14 +102,21 @@ export default function AdminSidebar({
     <div className="flex h-full w-64 flex-col border-r border-slate-200 bg-slate-900 text-slate-300">
       
       {/* Brand Header */}
-      <div className="flex h-16 items-center justify-between px-6 border-b border-slate-800">
-        <div className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#0284C7] text-white font-black text-sm">
-            BD
-          </div>
+      <div className="flex h-16 items-center justify-between px-5 border-b border-slate-800">
+        <div className="flex items-center gap-2.5">
+          <img 
+            src="/MyDocBD-App-Icon.png" 
+            alt="MyDocBD App Icon" 
+            className="h-8 w-8 object-contain rounded-lg" 
+          />
           <div>
-            <span className="font-extrabold text-white text-sm tracking-wide block">MyDocBD Admin</span>
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1.5">
+              <span className="font-extrabold text-white text-sm tracking-wide block">MyDocBD</span>
+              <span className="bg-sky-500/20 text-sky-400 border border-sky-500/30 text-[9px] font-black px-1.5 py-0.5 rounded">
+                Admin Panel
+              </span>
+            </div>
+            <div className="flex items-center gap-1 mt-0.5">
               <span className="relative flex h-2 w-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>

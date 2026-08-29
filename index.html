@@ -2,14 +2,36 @@
 <html lang="bn">
   <head>
     <meta charset="UTF-8" />
+    <script>
+      (function() {
+        try {
+          if (typeof window !== 'undefined' && window.fetch) {
+            var activeFetch = window.fetch.bind(window);
+            Object.defineProperty(window, 'fetch', {
+              get: function() { return activeFetch; },
+              set: function(newFetch) { if (typeof newFetch === 'function') { activeFetch = newFetch; } },
+              configurable: true,
+              enumerable: true
+            });
+          }
+        } catch (e) {
+          console.warn('Fetch setter patch notice:', e);
+        }
+      })();
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>MyDocBD - দেশের সেরা বিশেষজ্ঞ ডাক্তার ও চেম্বার সিরিয়াল | mydocbd.com</title>
     <meta name="description" content="MyDocBD (মাই ডক বিডি) - দেশের স্বনামধন্য বিশেষজ্ঞ ডাক্তারদের বিস্তারিত সময়সূচি, ভিজিট ফি এবং ঘরে বসেই অত্যন্ত সহজে চেম্বার সিরিয়াল নিশ্চিতকরণ প্ল্যাটফর্ম।" />
     <meta name="keywords" content="MyDocBD, মাই ডক বিডি, mydocbd.com, ডাক্তার সিরিয়াল, অনলাইন ডাক্তার সিরিয়াল, ডক্টর ডিরেক্টরি, চেম্বার সিরিয়াল বুকিং, হাসপাতাল ডাক্তার তালিকা" />
     
+    <!-- Favicon & Touch Icons -->
+    <link rel="icon" type="image/png" href="/MyDocBD-App-Icon.png" />
+    <link rel="apple-touch-icon" href="/MyDocBD-App-Icon.png" />
+
     <!-- OpenGraph Metadata -->
     <meta property="og:title" content="MyDocBD - বিশেষজ্ঞ ডাক্তার ও চেম্বার সিরিয়াল সেবা" />
     <meta property="og:description" content="ঘরে বসেই MyDocBD-এর মাধ্যমে দেশের সেরা বিশেষজ্ঞ ডাক্তারদের চেম্বার শিডিউল জানুন ও সিরিয়াল কনফার্ম করুন।" />
+    <meta property="og:image" content="https://mydocbd.com/MyDocBD-Logo.png" />
     <meta property="og:type" content="website" />
     <meta property="og:locale" content="bn_BD" />
     <meta property="og:url" content="https://mydocbd.com" />
@@ -19,9 +41,7 @@
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="MyDocBD - বিশেষজ্ঞ ডাক্তার ও চেম্বার সিরিয়াল সেবা" />
     <meta name="twitter:description" content="ঘরে বসেই MyDocBD-এর মাধ্যমে দেশের সেরা বিশেষজ্ঞ ডাক্তারদের চেম্বার শিডিউল জানুন ও সিরিয়াল কনফার্ম করুন।" />
-
-    <!-- High-Resolution Embedded Medical SVG Favicon -->
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%230284C7' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M22 12h-4l-3 9L9 3l-3 9H2'/%3E%3C/svg%3E" />
+    <meta name="twitter:image" content="https://mydocbd.com/MyDocBD-Logo.png" />
 
     <!-- Google Fonts: Poppins and Hind Siliguri -->
     <link rel="preconnect" href="https://fonts.googleapis.com">

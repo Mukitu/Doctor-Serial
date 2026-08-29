@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import brandLogo from '@/app/about/MyDocBD-Logo.png';
 import { 
   Search, 
   Calendar, 
@@ -286,7 +287,8 @@ export default function AppointmentTracker({ appointments }: AppointmentTrackerP
                       id={`tracking-card-${app.id}`}
                     >
                       {/* Top status bar */}
-                      <div className="flex items-center justify-between border-b border-slate-150 p-4">
+                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-150 p-4 bg-white/60">
+                        <img src="/MyDocBD-Logo.png" alt="MyDocBD Logo" className="h-7 w-auto object-contain" />
                         <div className="flex items-center gap-1.5 text-xs text-slate-500">
                           <Calendar className="h-4 w-4 text-slate-400" />
                           <span>আবেদনের তারিখ:</span>

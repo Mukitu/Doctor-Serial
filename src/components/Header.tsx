@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { HeartPulse, MapPin, Search, Calendar, ShieldCheck, Menu, X } from 'lucide-react';
+import { MapPin, Search, Calendar, ShieldCheck, Menu, X } from 'lucide-react';
+import brandLogo from '@/app/about/MyDocBD-Logo.png';
 import { DISTRICTS } from '../data/mockData';
 import { ActiveTab, District, AdminProfile } from '../types';
 
@@ -41,15 +42,11 @@ export default function Header({
           onClick={() => { setActiveTab('home'); setMobileMenuOpen(false); }}
           id="platform-logo"
         >
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-sky-600 text-white border border-sky-600/10">
-            <HeartPulse className="h-5.5 w-5.5" />
-          </div>
-          <div>
-            <h1 className="text-xl font-bold tracking-tight text-slate-900">
-              <span className='text-sky-600 font-bold'>MyDoc</span><span className='bg-teal-600 text-white px-1.5 py-0.5 rounded-md ml-0.5 text-xs font-semibold'>BD</span>
-            </h1>
-            <p className="text-[9px] text-slate-400 font-bold tracking-wider uppercase">ডিজিটাল হেলথ ডিরেক্টরি</p>
-          </div>
+          <img 
+            src="/MyDocBD-Logo.png" 
+            alt="MyDocBD - ডিজিটাল হেলথ ডিরেক্টরি" 
+            className="h-9 md:h-11 w-auto object-contain" 
+          />
         </div>
 
         {/* Center: District Selector & Nav Links */}

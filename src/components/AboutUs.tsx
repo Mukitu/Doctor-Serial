@@ -27,8 +27,8 @@ export default function AboutUs({ onBackToHome }: AboutUsProps) {
 
         {/* Hero Header Section */}
         <div className="text-center mb-12 md:mb-16">
-          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-sky-50 text-sky-600 border border-sky-100 mb-4 shadow-xs">
-            <HeartPulse className="h-6 w-6" />
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-sky-50 p-1 border border-sky-100 mb-4 shadow-xs">
+            <img src="/MyDocBD-App-Icon.png" alt="MyDocBD Icon" className="h-9 w-9 object-contain rounded-lg" />
           </div>
           <h1 className="text-3xl font-extrabold tracking-tight text-slate-900 sm:text-4xl">
             আমাদের নেতৃত্ব ও পরিচিতি
