@@ -641,12 +641,14 @@ export async function getDoctors(): Promise<Doctor[]> {
         const fac = facilityMap.get(dc.facility_id);
         const facName = fac?.name || dc.facility_name || dc.facilityName || dc.facility || dc.facilities?.name || '';
         const facAddress = fac?.area_address || dc.facility_address || dc.facilityAddress || dc.facilities?.area_address || '';
+        const facDistrictId = fac?.district_id || dc.facility_district_id || dc.facilityDistrictId || '';
         return {
           id: dc.id,
           doctorId: doc.id,
           facilityId: dc.facility_id,
           facilityName: facName,
           facilityAddress: facAddress,
+          facilityDistrictId: facDistrictId,
           roomNo: dc.room_no || '',
           floor: dc.floor || 'নিচতলা',
           buildingStand: dc.building_stand || 'মেইন বিল্ডিং',
@@ -722,7 +724,7 @@ export async function getDoctors(): Promise<Doctor[]> {
           facilityId: primaryChamber?.facilityId || '',
           facilityName: primaryChamber?.facilityName || '',
           facilityAddress: primaryChamber?.facilityAddress || '',
-          facilityDistrictId: '',
+          facilityDistrictId: primaryChamber?.facilityDistrictId || '',
           chamberRoomNo: primaryChamber?.roomNo || '',
           chamberFloor: primaryChamber?.floor || 'নিচতলা',
           chamberBuildingStand: primaryChamber?.buildingStand || 'মেইন বিল্ডিং',
@@ -966,6 +968,39 @@ export async function upsertDoctorWithChambers(
   let resolvedSpecialtyNameEn = doctor.specialtyNameEn || '';
   let resolvedSpecialtyId = doctor.specialtyId || doctor.specialty_id || null;
 
+  // Pre-fetch reference data to resolve district and specialty relations dynamically
+  let allFacilities: Facility[] = [];
+  let allSpecialties: Specialty[] = [];
+  try {
+    const [facList, specList] = await Promise.all([
+      getFacilities(),
+      getSpecialties()
+    ]);
+    allFacilities = facList;
+    allSpecialties = specList;
+  } catch (err) {
+    console.warn('[upsertDoctorWithChambers] Failed to pre-fetch reference data:', err);
+  }
+
+  const facilityMapForUpsert = new Map(allFacilities.map(f => [f.id, f]));
+  const specialtyMapForUpsert = new Map(allSpecialties.map(s => [s.id, s]));
+
+  // If specialtyId is provided but names are missing, resolve them
+  if (resolvedSpecialtyId) {
+    const matchedSpec = specialtyMapForUpsert.get(resolvedSpecialtyId);
+    if (matchedSpec) {
+      resolvedSpecialtyNameBn = matchedSpec.nameBn;
+      resolvedSpecialtyNameEn = matchedSpec.nameEn || '';
+    }
+  } else if (resolvedSpecialtyNameBn) {
+    // Try finding specialtyId by nameBn
+    const matchedSpec = allSpecialties.find(s => s.nameBn === resolvedSpecialtyNameBn || s.nameEn === resolvedSpecialtyNameBn);
+    if (matchedSpec) {
+      resolvedSpecialtyId = matchedSpec.id;
+      resolvedSpecialtyNameEn = matchedSpec.nameEn || '';
+    }
+  }
+
   // 1. Process Chambers array for both LocalStorage and Supabase
   const primaryChamber = chambers && chambers.length > 0 ? chambers[0] : null;
   const resolvedChambersList = (chambers && chambers.length > 0 ? chambers : [
@@ -995,17 +1030,20 @@ export async function upsertDoctorWithChambers(
     }
 
     const chId = ch.id || ch.chamberId || `ch-${Date.now()}-${idx}`;
+    const targetFacilityId = ch.facilityId || ch.facility_id || '';
+    const matchedFacObj = facilityMapForUpsert.get(targetFacilityId);
+    const resolvedDistrictId = ch.facilityDistrictId || ch.facility_district_id || matchedFacObj?.districtId || (matchedFacObj as any)?.district_id || '';
 
     return {
       id: chId,
       doctorId: rawId || '',
-      facilityId: ch.facilityId || ch.facility_id || '',
-      facilityName: ch.facilityName || ch.facility || '',
-      facilityAddress: ch.facilityAddress || ch.chamberAddress || '',
-      facilityDistrictId: ch.facilityDistrictId || '',
+      facilityId: targetFacilityId,
+      facilityName: ch.facilityName || ch.facility || matchedFacObj?.name || '',
+      facilityAddress: ch.facilityAddress || ch.chamberAddress || matchedFacObj?.areaAddress || '',
+      facilityDistrictId: resolvedDistrictId,
       roomNo: ch.roomNo || ch.room_no || '',
       floor: ch.floor || 'নিচতলা',
-      buildingStand: ch.buildingStand || ch.building_stand || ch.building_info || 'মেইন বিল্ডিং',
+      buildingStand: ch.building_stand || ch.building_stand || ch.building_info || 'মেইন বিল্ডিং',
       visitingDays: daysArr,
       visitingTime: ch.visitingTime || ch.visiting_time || '',
       feeNew: Number(ch.feeNew ?? ch.fee_new ?? 0),
@@ -1143,32 +1181,46 @@ export async function upsertDoctorWithChambers(
     }
 
     // Upsert Doctor profile
+    let didUpdate = false;
     if (!isNew && targetDocId) {
-      const { error: updateErr } = await supabase
+      const { data: updateData, error: updateErr } = await supabase
         .from('doctors')
         .update(docPayload)
-        .eq('id', targetDocId);
+        .eq('id', targetDocId)
+        .select('id');
 
       if (updateErr) {
         if (updateErr.message?.includes('about') || updateErr.message?.includes('column')) {
           delete docPayload.about;
-          const { error: retryUpdateErr } = await supabase
+          const { data: retryData, error: retryUpdateErr } = await supabase
             .from('doctors')
             .update(docPayload)
-            .eq('id', targetDocId);
+            .eq('id', targetDocId)
+            .select('id');
           if (retryUpdateErr) throw retryUpdateErr;
+          if (retryData && retryData.length > 0) {
+            didUpdate = true;
+          }
         } else if (updateErr.message?.includes('specialty_id')) {
           docPayload.specialty_id = null;
-          const { error: retrySpecErr } = await supabase
+          const { data: retryData, error: retrySpecErr } = await supabase
             .from('doctors')
             .update(docPayload)
-            .eq('id', targetDocId);
+            .eq('id', targetDocId)
+            .select('id');
           if (retrySpecErr) throw retrySpecErr;
+          if (retryData && retryData.length > 0) {
+            didUpdate = true;
+          }
         } else {
           throw updateErr;
         }
+      } else if (updateData && updateData.length > 0) {
+        didUpdate = true;
       }
-    } else {
+    }
+
+    if (isNew || !didUpdate) {
       const insertPayload = { id: targetDocId, ...docPayload };
       const { error: insertErr } = await supabase
         .from('doctors')

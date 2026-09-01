@@ -88,3 +88,6 @@ CREATE POLICY "Public Read Active Banners" ON public.promo_banners FOR SELECT US
 
 DROP POLICY IF EXISTS "Admin Full Banners Access" ON public.promo_banners;
 CREATE POLICY "Admin Full Banners Access" ON public.promo_banners FOR ALL USING (true) WITH CHECK (true);
+
+-- Ensure doctors table has the 'about' column for biography/about description
+ALTER TABLE public.doctors ADD COLUMN IF NOT EXISTS about TEXT;

@@ -53,6 +53,7 @@ CREATE TABLE IF NOT EXISTS doctors (
     degrees TEXT NOT NULL,
     designation TEXT NOT NULL,
     workplace TEXT NOT NULL,
+    about TEXT,
     ps_phone TEXT,
     photo_url TEXT,
     display_priority INT DEFAULT 0,
@@ -61,6 +62,9 @@ CREATE TABLE IF NOT EXISTS doctors (
     review_count INT DEFAULT 0,
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Ensure about column exists in case the table was created previously without it
+ALTER TABLE doctors ADD COLUMN IF NOT EXISTS about TEXT;
 
 -- 5. Chambers Table
 CREATE TABLE IF NOT EXISTS chambers (
