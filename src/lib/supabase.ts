@@ -581,14 +581,37 @@ export async function deleteFacility(id: string): Promise<void> {
 // 4. DOCTORS & CHAMBERS CONSOLIDATED CRUD
 // ==========================================
 
+// Helper to filter out doctors that have been deleted permanently
+function filterDeletedDoctors(list: Doctor[]): Doctor[] {
+  let deletedDoctorIds: string[] = [];
+  try {
+    deletedDoctorIds = JSON.parse(localStorage.getItem('sheba_deleted_doctor_ids') || '[]');
+  } catch (e) {
+    deletedDoctorIds = [];
+  }
+  if (!deletedDoctorIds || deletedDoctorIds.length === 0) return list;
+
+  return list.filter(d => {
+    if (!d) return false;
+    const rawId = (d.id || d.doctorId || '').split('::')[0];
+    const isDeleted = deletedDoctorIds.includes(d.id) ||
+                      deletedDoctorIds.includes(rawId) ||
+                      (d.doctorId && deletedDoctorIds.includes(d.doctorId)) ||
+                      (d.bmdc && deletedDoctorIds.includes(d.bmdc)) ||
+                      (d.name && deletedDoctorIds.includes(d.name));
+    return !isDeleted;
+  });
+}
+
 export async function getDoctors(): Promise<Doctor[]> {
   if (!isSupabaseConfigured || !supabase) {
     const saved = localStorage.getItem('sheba_doctors_v3');
     if (!saved) {
-      localStorage.setItem('sheba_doctors_v3', JSON.stringify(INITIAL_DOCTORS));
-      return INITIAL_DOCTORS;
+      const filteredInitial = filterDeletedDoctors(INITIAL_DOCTORS);
+      localStorage.setItem('sheba_doctors_v3', JSON.stringify(filteredInitial));
+      return filteredInitial;
     }
-    return JSON.parse(saved);
+    return filterDeletedDoctors(JSON.parse(saved));
   }
 
   try {
@@ -737,12 +760,13 @@ export async function getDoctors(): Promise<Doctor[]> {
       }
     });
 
-    localStorage.setItem('sheba_doctors_v3', JSON.stringify(mappedList));
-    return mappedList;
+    const finalFilteredList = filterDeletedDoctors(mappedList);
+    localStorage.setItem('sheba_doctors_v3', JSON.stringify(finalFilteredList));
+    return finalFilteredList;
   } catch (err) {
     console.error('Error fetching joined doctors:', err);
     const saved = localStorage.getItem('sheba_doctors_v3');
-    return saved ? JSON.parse(saved) : [];
+    return saved ? filterDeletedDoctors(JSON.parse(saved)) : [];
   }
 }
 
@@ -896,6 +920,26 @@ export async function deleteDoctor(id: string): Promise<void> {
     return dId === rawId || d.id === id || d.doctorId === id;
   });
 
+  // Track deleted doctor identifiers in localStorage to prevent resurfacing
+  try {
+    const deletedDoctorIds: string[] = JSON.parse(localStorage.getItem('sheba_deleted_doctor_ids') || '[]');
+    const toAdd = [id, rawId];
+    if (targetDoc) {
+      if (targetDoc.id) toAdd.push(targetDoc.id);
+      if (targetDoc.doctorId) toAdd.push(targetDoc.doctorId);
+      if (targetDoc.bmdc) toAdd.push(targetDoc.bmdc);
+      if (targetDoc.name) toAdd.push(targetDoc.name);
+    }
+    toAdd.forEach(item => {
+      if (item && !deletedDoctorIds.includes(item)) {
+        deletedDoctorIds.push(item);
+      }
+    });
+    localStorage.setItem('sheba_deleted_doctor_ids', JSON.stringify(deletedDoctorIds));
+  } catch (e) {
+    console.error('Failed to update sheba_deleted_doctor_ids:', e);
+  }
+
   const filtered = doctors.filter(d => {
     const dId = (d.doctorId || d.id || '').split('::')[0];
     return dId !== rawId && d.id !== id && d.doctorId !== id;
@@ -939,6 +983,31 @@ export async function deleteDoctor(id: string): Promise<void> {
         .delete()
         .eq('id', targetDocId);
       if (error) console.warn('Supabase doctor delete notice:', error.message);
+    }
+
+    // Secondary fallback cleanup by BMDC or Name in case ID differed
+    if (targetDoc?.bmdc) {
+      const { data: bmdcDocs } = await supabase.from('doctors').select('id').eq('bmdc_number', targetDoc.bmdc);
+      if (bmdcDocs && bmdcDocs.length > 0) {
+        for (const bd of bmdcDocs) {
+          await supabase.from('chambers').delete().eq('doctor_id', bd.id);
+          await supabase.from('appointments').delete().eq('doctor_id', bd.id);
+          await supabase.from('reviews').delete().eq('doctor_id', bd.id);
+          await supabase.from('doctors').delete().eq('id', bd.id);
+        }
+      }
+    }
+
+    if (targetDoc?.name) {
+      const { data: nameDocs } = await supabase.from('doctors').select('id').eq('name', targetDoc.name);
+      if (nameDocs && nameDocs.length > 0) {
+        for (const nd of nameDocs) {
+          await supabase.from('chambers').delete().eq('doctor_id', nd.id);
+          await supabase.from('appointments').delete().eq('doctor_id', nd.id);
+          await supabase.from('reviews').delete().eq('doctor_id', nd.id);
+          await supabase.from('doctors').delete().eq('id', nd.id);
+        }
+      }
     }
   } catch (err) {
     console.error('Error deleting doctor:', err);
@@ -1133,6 +1202,14 @@ export async function upsertDoctorWithChambers(
 
   // Always update LocalStorage cache immediately for responsive instant feedback
   try {
+    // Clear from deleted doctor IDs tracking list if present
+    const deletedDoctorIds: string[] = JSON.parse(localStorage.getItem('sheba_deleted_doctor_ids') || '[]');
+    if (deletedDoctorIds.length > 0) {
+      const toRemove = [unifiedDoctor.id, unifiedDoctor.doctorId, unifiedDoctor.bmdc, unifiedDoctor.name, rawId].filter(Boolean);
+      const cleaned = deletedDoctorIds.filter(id => !toRemove.includes(id));
+      localStorage.setItem('sheba_deleted_doctor_ids', JSON.stringify(cleaned));
+    }
+
     const existingDoctors = await getDoctors();
     const filteredDoctors = existingDoctors.filter(d => {
       const dDocId = (d.doctorId || d.id || '').split('::')[0];
