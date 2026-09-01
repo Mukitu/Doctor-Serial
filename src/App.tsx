@@ -316,6 +316,12 @@ export default function App() {
   };
 
   const handleDeleteDoctor = async (id: string) => {
+    const rawId = id.split('::')[0];
+    setDoctors((prev) => prev.filter((d) => {
+      const dId = (d.doctorId || d.id || '').split('::')[0];
+      return dId !== rawId && d.id !== id && d.doctorId !== id;
+    }));
+
     try {
       await deleteDoctor(id);
       const refreshedDocs = await getDoctors();
@@ -324,8 +330,6 @@ export default function App() {
       }
     } catch (err) {
       console.error('Failed to delete doctor:', err);
-      // Client-side fallback if offline
-      setDoctors((prev) => prev.filter((d) => d.id !== id));
     }
   };
 

@@ -891,9 +891,14 @@ export async function updateDoctor(doc: Doctor): Promise<void> {
 export async function deleteDoctor(id: string): Promise<void> {
   const doctors = await getDoctors();
   const rawId = id.split('::')[0];
+  const targetDoc = doctors.find(d => {
+    const dId = (d.doctorId || d.id || '').split('::')[0];
+    return dId === rawId || d.id === id || d.doctorId === id;
+  });
+
   const filtered = doctors.filter(d => {
     const dId = (d.doctorId || d.id || '').split('::')[0];
-    return dId !== rawId && d.id !== id;
+    return dId !== rawId && d.id !== id && d.doctorId !== id;
   });
   localStorage.setItem('sheba_doctors_v3', JSON.stringify(filtered));
 
@@ -903,14 +908,32 @@ export async function deleteDoctor(id: string): Promise<void> {
 
   try {
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    let targetDocId = uuidRegex.test(rawId) ? rawId : null;
+    let targetDocId: string | null = (rawId && uuidRegex.test(rawId)) ? rawId : null;
 
-    if (!targetDocId && uuidRegex.test(rawId)) {
+    if (!targetDocId && rawId && uuidRegex.test(rawId)) {
       const { data } = await supabase.from('doctors').select('id').eq('id', rawId).maybeSingle();
       if (data?.id) targetDocId = data.id;
     }
 
+    if (!targetDocId && targetDoc) {
+      if (targetDoc.bmdc) {
+        const { data: bmdcMatch } = await supabase.from('doctors').select('id').eq('bmdc_number', targetDoc.bmdc).maybeSingle();
+        if (bmdcMatch?.id) targetDocId = bmdcMatch.id;
+      }
+      if (!targetDocId && targetDoc.name) {
+        const { data: nameMatch } = await supabase.from('doctors').select('id').eq('name', targetDoc.name).maybeSingle();
+        if (nameMatch?.id) targetDocId = nameMatch.id;
+      }
+    }
+
     if (targetDocId) {
+      // 1. Delete associated chambers first
+      await supabase.from('chambers').delete().eq('doctor_id', targetDocId);
+      // 2. Delete associated appointments & reviews if any
+      await supabase.from('appointments').delete().eq('doctor_id', targetDocId);
+      await supabase.from('reviews').delete().eq('doctor_id', targetDocId);
+
+      // 3. Delete doctor record
       const { error } = await supabase
         .from('doctors')
         .delete()
@@ -925,6 +948,11 @@ export async function deleteDoctor(id: string): Promise<void> {
 export async function updateDoctorStatus(id: string, isActive: boolean): Promise<void> {
   const rawId = id.split('::')[0];
   const doctors = await getDoctors();
+  const targetDoc = doctors.find(d => {
+    const dId = (d.doctorId || d.id || '').split('::')[0];
+    return dId === rawId || d.id === id || d.doctorId === id;
+  });
+
   const updated = doctors.map(d => {
     const dId = (d.doctorId || d.id || '').split('::')[0];
     return dId === rawId || d.id === id ? { ...d, isActive } : d;
@@ -937,11 +965,22 @@ export async function updateDoctorStatus(id: string, isActive: boolean): Promise
 
   try {
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    let targetDocId = uuidRegex.test(rawId) ? rawId : null;
+    let targetDocId: string | null = (rawId && uuidRegex.test(rawId)) ? rawId : null;
 
-    if (!targetDocId && uuidRegex.test(rawId)) {
+    if (!targetDocId && rawId && uuidRegex.test(rawId)) {
       const { data } = await supabase.from('doctors').select('id').eq('id', rawId).maybeSingle();
       if (data?.id) targetDocId = data.id;
+    }
+
+    if (!targetDocId && targetDoc) {
+      if (targetDoc.bmdc) {
+        const { data: bmdcMatch } = await supabase.from('doctors').select('id').eq('bmdc_number', targetDoc.bmdc).maybeSingle();
+        if (bmdcMatch?.id) targetDocId = bmdcMatch.id;
+      }
+      if (!targetDocId && targetDoc.name) {
+        const { data: nameMatch } = await supabase.from('doctors').select('id').eq('name', targetDoc.name).maybeSingle();
+        if (nameMatch?.id) targetDocId = nameMatch.id;
+      }
     }
 
     if (targetDocId) {
