@@ -67,6 +67,8 @@ export interface Doctor {
   specialties?: string[];
   specialtyNameBn?: string;
   specialtyNameEn?: string;
+  subSpecialty?: string;
+  sub_specialty?: string;
   chamberId?: string;
   facilityId?: string;
   facilityName?: string;

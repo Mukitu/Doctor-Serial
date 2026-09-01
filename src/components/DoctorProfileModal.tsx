@@ -213,6 +213,11 @@ export default function DoctorProfileModal({
                       {specName}
                     </span>
                   ))}
+                  {(doctor.subSpecialty || doctor.sub_specialty) && (
+                    <span className="inline-flex rounded-md bg-indigo-50 px-2 py-0.5 text-[10px] font-extrabold text-indigo-700 border border-indigo-200/50">
+                      {doctor.subSpecialty || doctor.sub_specialty}
+                    </span>
+                  )}
                   <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700 border border-emerald-200/50">
                     <ShieldCheck className="h-3 w-3" />
                     <span>BM&DC: {doctor.bmdc || 'ভেরিফাইড'}</span>

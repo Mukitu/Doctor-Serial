@@ -726,6 +726,8 @@ export async function getDoctors(): Promise<Doctor[]> {
           specialtyNameBn: combinedSpecialtyText,
           specialtyNameEn: spec?.name_en || '',
           specialty: combinedSpecialtyText,
+          subSpecialty: doc.sub_specialty || doc.subSpecialty || '',
+          sub_specialty: doc.sub_specialty || doc.subSpecialty || '',
           facility: 'চেম্বার তথ্য যুক্ত করা হয়নি',
           chamberAddress: '',
           name: doc.name,
@@ -765,6 +767,8 @@ export async function getDoctors(): Promise<Doctor[]> {
           specialtyNameBn: combinedSpecialtyText,
           specialtyNameEn: spec?.name_en || '',
           specialty: combinedSpecialtyText,
+          subSpecialty: doc.sub_specialty || doc.subSpecialty || '',
+          sub_specialty: doc.sub_specialty || doc.subSpecialty || '',
           facility: primaryChamber?.facilityName || '',
           chamberAddress: primaryChamber?.facilityAddress || '',
           name: doc.name,
@@ -1341,6 +1345,10 @@ export async function upsertDoctorWithChambers(
       docPayload.about = doctor.about;
     }
 
+    if (doctor.subSpecialty !== undefined || doctor.sub_specialty !== undefined) {
+      docPayload.sub_specialty = doctor.subSpecialty || doctor.sub_specialty || '';
+    }
+
     if (Array.isArray(doctor.specialtyIds) || Array.isArray(doctor.specialty_ids)) {
       docPayload.specialty_ids = doctor.specialtyIds || doctor.specialty_ids;
     }
@@ -1358,9 +1366,10 @@ export async function upsertDoctorWithChambers(
         .select('id');
 
       if (updateErr) {
-        if (updateErr.message?.includes('specialty_ids') || updateErr.message?.includes('specialties') || updateErr.message?.includes('column')) {
+        if (updateErr.message?.includes('specialty_ids') || updateErr.message?.includes('specialties') || updateErr.message?.includes('sub_specialty') || updateErr.message?.includes('column')) {
           delete docPayload.specialty_ids;
           delete docPayload.specialties;
+          delete docPayload.sub_specialty;
           if (updateErr.message?.includes('about')) {
             delete docPayload.about;
           }
@@ -1399,9 +1408,10 @@ export async function upsertDoctorWithChambers(
         .insert(insertPayload);
 
       if (insertErr) {
-        if (insertErr.message?.includes('specialty_ids') || insertErr.message?.includes('specialties') || insertErr.message?.includes('column')) {
+        if (insertErr.message?.includes('specialty_ids') || insertErr.message?.includes('specialties') || insertErr.message?.includes('sub_specialty') || insertErr.message?.includes('column')) {
           delete insertPayload.specialty_ids;
           delete insertPayload.specialties;
+          delete insertPayload.sub_specialty;
           if (insertErr.message?.includes('about')) {
             delete insertPayload.about;
           }

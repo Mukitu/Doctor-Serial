@@ -97,6 +97,11 @@ export default function DoctorCard({
                     {specName}
                   </span>
                 ))}
+                {(doctor.subSpecialty || doctor.sub_specialty) && (
+                  <span className="inline-flex rounded-md bg-indigo-50 px-2 py-0.5 text-[9px] font-extrabold text-indigo-700 border border-indigo-100">
+                    {doctor.subSpecialty || doctor.sub_specialty}
+                  </span>
+                )}
                 <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold text-amber-800 border border-amber-200/60">
                   <Star className="h-3 w-3 fill-amber-400 text-amber-500" />
                   <span>{(doctor.rating || 5.0).toFixed(1)}</span>

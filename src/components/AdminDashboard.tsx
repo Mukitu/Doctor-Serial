@@ -1042,6 +1042,11 @@ export default function AdminDashboard({
                                 {specName}
                               </span>
                             ))}
+                            {(doc.subSpecialty || doc.sub_specialty) && (
+                              <span className="inline-flex rounded-md bg-indigo-50 px-2 py-0.5 text-[10px] font-bold text-indigo-700 border border-indigo-100">
+                                {doc.subSpecialty || doc.sub_specialty}
+                              </span>
+                            )}
                           </div>
                           <p className="text-[10px] text-slate-400 font-mono mt-1">BMDC: {doc.bmdc || 'N/A'}</p>
                         </td>

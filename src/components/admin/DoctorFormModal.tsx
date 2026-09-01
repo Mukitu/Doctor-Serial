@@ -44,6 +44,7 @@ export default function DoctorFormModal({
   const [bmdc, setBmdc] = useState('');
   const [specialtyId, setSpecialtyId] = useState('');
   const [selectedSpecialtyIds, setSelectedSpecialtyIds] = useState<string[]>([]);
+  const [subSpecialty, setSubSpecialty] = useState('');
   const [degrees, setDegrees] = useState('');
   const [designation, setDesignation] = useState('');
   const [workplace, setWorkplace] = useState('');
@@ -105,6 +106,7 @@ export default function DoctorFormModal({
       }
       setSelectedSpecialtyIds(initialSpecIds);
       setSpecialtyId(initialSpecIds[0] || specialties[0]?.id || '');
+      setSubSpecialty(doctor.subSpecialty || doctor.sub_specialty || '');
 
       setDegrees(doctor.degrees || '');
       setDesignation(doctor.designation || '');
@@ -193,6 +195,7 @@ export default function DoctorFormModal({
       setBmdc('');
       setSpecialtyId(specialties[0]?.id || '');
       setSelectedSpecialtyIds(specialties[0]?.id ? [specialties[0].id] : []);
+      setSubSpecialty('');
       setDegrees('');
       setDesignation('');
       setWorkplace('');
@@ -597,6 +600,8 @@ export default function DoctorFormModal({
       specialty: combinedSpecialtyStr,
       specialtyNameBn: combinedSpecialtyStr,
       specialtyNameEn: specNamesEn.join(', '),
+      subSpecialty: subSpecialty.trim(),
+      sub_specialty: subSpecialty.trim(),
       degrees: degrees.trim(),
       designation: designation.trim(),
       workplace: workplace.trim(),
@@ -790,6 +795,26 @@ export default function DoctorFormModal({
                       );
                     })}
                   </div>
+                </div>
+
+                {/* Sub-Specialty / Sub-Category (Optional Text Input) */}
+                <div className="flex flex-col gap-1.5 col-span-1 sm:col-span-2">
+                  <div className="flex items-center justify-between">
+                    <label htmlFor="doctor-sub-specialty" className="text-[11px] font-bold text-slate-600 flex items-center gap-1.5">
+                      <span>সাব-ক্যাটাগরি / বিশেষ অভিজ্ঞতা (ঐচ্ছিক)</span>
+                      <span className="text-[#0284C7] font-extrabold text-[10px] bg-sky-50 px-2 py-0.5 rounded-md border border-sky-200/80">
+                        (টাইপ করে লিখুন)
+                      </span>
+                    </label>
+                  </div>
+                  <input
+                    id="doctor-sub-specialty"
+                    type="text"
+                    value={subSpecialty}
+                    onChange={(e) => setSubSpecialty(e.target.value)}
+                    placeholder="যেমন: ইন্টারভেনশনাল কার্ডিওলজি, শিশু নিউরোলজি, লিভার রোগ বিশেষজ্ঞ"
+                    className="w-full rounded-lg border border-slate-200 py-2 px-3 text-xs font-bold text-slate-800 outline-none focus:border-[#0284C7] bg-white"
+                  />
                 </div>
 
                 {/* Degrees */}
