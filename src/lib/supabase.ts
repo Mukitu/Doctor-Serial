@@ -951,66 +951,58 @@ export async function deleteDoctor(id: string): Promise<void> {
   }
 
   try {
+    const targetDocIds = new Set<string>();
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    let targetDocId: string | null = (rawId && uuidRegex.test(rawId)) ? rawId : null;
 
-    if (!targetDocId && rawId && uuidRegex.test(rawId)) {
-      const { data } = await supabase.from('doctors').select('id').eq('id', rawId).maybeSingle();
-      if (data?.id) targetDocId = data.id;
+    if (rawId && uuidRegex.test(rawId)) targetDocIds.add(rawId);
+    if (id && uuidRegex.test(id)) targetDocIds.add(id);
+
+    // 1. Query Supabase doctors table to find all matching doctor records
+    const { data: allSupabaseDocs, error: fetchErr } = await supabase.from('doctors').select('id, name, bmdc_number');
+    if (fetchErr) {
+      console.warn('[Supabase Delete Fetch Notice]:', fetchErr.message);
     }
 
-    if (!targetDocId && targetDoc) {
-      if (targetDoc.bmdc) {
-        const { data: bmdcMatch } = await supabase.from('doctors').select('id').eq('bmdc_number', targetDoc.bmdc).maybeSingle();
-        if (bmdcMatch?.id) targetDocId = bmdcMatch.id;
-      }
-      if (!targetDocId && targetDoc.name) {
-        const { data: nameMatch } = await supabase.from('doctors').select('id').eq('name', targetDoc.name).maybeSingle();
-        if (nameMatch?.id) targetDocId = nameMatch.id;
-      }
+    if (allSupabaseDocs && allSupabaseDocs.length > 0) {
+      allSupabaseDocs.forEach(d => {
+        if (!d || !d.id) return;
+        const dRawId = d.id.split('::')[0];
+        if (d.id === id || d.id === rawId || dRawId === rawId) {
+          targetDocIds.add(d.id);
+        }
+        if (targetDoc?.bmdc && d.bmdc_number && d.bmdc_number === targetDoc.bmdc) {
+          targetDocIds.add(d.id);
+        }
+        if (targetDoc?.name && d.name && d.name === targetDoc.name) {
+          targetDocIds.add(d.id);
+        }
+      });
     }
 
-    if (targetDocId) {
-      // 1. Delete associated chambers first
-      await supabase.from('chambers').delete().eq('doctor_id', targetDocId);
-      // 2. Delete associated appointments & reviews if any
-      await supabase.from('appointments').delete().eq('doctor_id', targetDocId);
-      await supabase.from('reviews').delete().eq('doctor_id', targetDocId);
-
-      // 3. Delete doctor record
-      const { error } = await supabase
-        .from('doctors')
-        .delete()
-        .eq('id', targetDocId);
-      if (error) console.warn('Supabase doctor delete notice:', error.message);
-    }
-
-    // Secondary fallback cleanup by BMDC or Name in case ID differed
+    // 2. Also search specific equality queries if list was empty or incomplete
     if (targetDoc?.bmdc) {
-      const { data: bmdcDocs } = await supabase.from('doctors').select('id').eq('bmdc_number', targetDoc.bmdc);
-      if (bmdcDocs && bmdcDocs.length > 0) {
-        for (const bd of bmdcDocs) {
-          await supabase.from('chambers').delete().eq('doctor_id', bd.id);
-          await supabase.from('appointments').delete().eq('doctor_id', bd.id);
-          await supabase.from('reviews').delete().eq('doctor_id', bd.id);
-          await supabase.from('doctors').delete().eq('id', bd.id);
-        }
-      }
+      const { data: bmdcMatches } = await supabase.from('doctors').select('id').eq('bmdc_number', targetDoc.bmdc);
+      bmdcMatches?.forEach(m => m.id && targetDocIds.add(m.id));
+    }
+    if (targetDoc?.name) {
+      const { data: nameMatches } = await supabase.from('doctors').select('id').eq('name', targetDoc.name);
+      nameMatches?.forEach(m => m.id && targetDocIds.add(m.id));
     }
 
-    if (targetDoc?.name) {
-      const { data: nameDocs } = await supabase.from('doctors').select('id').eq('name', targetDoc.name);
-      if (nameDocs && nameDocs.length > 0) {
-        for (const nd of nameDocs) {
-          await supabase.from('chambers').delete().eq('doctor_id', nd.id);
-          await supabase.from('appointments').delete().eq('doctor_id', nd.id);
-          await supabase.from('reviews').delete().eq('doctor_id', nd.id);
-          await supabase.from('doctors').delete().eq('id', nd.id);
-        }
+    // 3. For ALL resolved doctor UUIDs, execute full cascade deletion
+    for (const docId of Array.from(targetDocIds)) {
+      await supabase.from('chambers').delete().eq('doctor_id', docId);
+      await supabase.from('appointments').delete().eq('doctor_id', docId);
+      await supabase.from('reviews').delete().eq('doctor_id', docId);
+      const { error: delErr } = await supabase.from('doctors').delete().eq('id', docId);
+      if (delErr) {
+        console.warn(`[Supabase Delete Doctor Notice for ${docId}]:`, delErr.message);
+      } else {
+        console.log(`[Supabase Delete Doctor Success]: Deleted doctor ${docId}`);
       }
     }
   } catch (err) {
-    console.error('Error deleting doctor:', err);
+    console.error('Error deleting doctor from Supabase:', err);
   }
 }
 
