@@ -18,6 +18,7 @@ import { Doctor, Appointment, ActiveTab, District, Specialty, Facility, AdminPro
 import { filterDoctorsList } from './utils/filterDoctors';
 import { HeartPulse, ShieldCheck, PhoneCall, HelpCircle, ChevronRight, Filter, X, Sparkles } from 'lucide-react';
 import {
+  supabase,
   isSupabaseConfigured,
   getDistricts,
   getSpecialties,
@@ -92,8 +93,8 @@ export default function App() {
   // Unified data-loading sequence that forces a re-render once all tables have successfully populated
   useEffect(() => {
     let isMounted = true;
-    async function loadInitialData() {
-      setIsLoading(true);
+
+    async function reloadAllData() {
       try {
         const [dbDistricts, dbSpecialties, dbFacilities, dbDocs, dbApps] = await Promise.all([
           getDistricts(),
@@ -104,7 +105,6 @@ export default function App() {
         ]);
 
         if (isMounted) {
-          // Batch atomic updates to avoid partial rendering or empty view states
           setDistricts(dbDistricts || []);
           setSpecialties(dbSpecialties || []);
           setFacilities(dbFacilities || []);
@@ -112,18 +112,50 @@ export default function App() {
           setAppointments(dbApps || []);
         }
       } catch (err) {
-        console.error('Error loading initial data in App:', err);
-      } finally {
-        if (isMounted) {
-          setIsLoading(false);
-        }
+        console.error('Error refreshing data in App:', err);
+      }
+    }
+
+    async function loadInitialData() {
+      setIsLoading(true);
+      await reloadAllData();
+      if (isMounted) {
+        setIsLoading(false);
       }
     }
 
     loadInitialData();
 
+    // Setup Supabase Realtime Subscription + Periodic Sync Loop
+    let channel: any = null;
+    let pollInterval: any = null;
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        channel = supabase
+          .channel('app-global-sync')
+          .on('postgres_changes', { event: '*', schema: 'public' }, () => {
+            reloadAllData();
+          })
+          .subscribe();
+      } catch (err) {
+        console.warn('Realtime subscription error:', err);
+      }
+
+      // Background poll every 3 seconds for instant multi-tab & multi-admin sync
+      pollInterval = setInterval(() => {
+        reloadAllData();
+      }, 3000);
+    }
+
     return () => {
       isMounted = false;
+      if (channel && supabase) {
+        supabase.removeChannel(channel);
+      }
+      if (pollInterval) {
+        clearInterval(pollInterval);
+      }
     };
   }, []);
 

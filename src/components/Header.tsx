@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { MapPin, Search, Calendar, ShieldCheck, Menu, X } from 'lucide-react';
-import brandLogo from '@/app/about/MyDocBD-Logo.png';
+import brandLogo from '@/app/about/MyDocBD-logo2.png';
 import { DISTRICTS } from '../data/mockData';
 import { ActiveTab, District, AdminProfile } from '../types';
 
@@ -43,7 +43,7 @@ export default function Header({
           id="platform-logo"
         >
           <img 
-            src="/MyDocBD-Logo.png" 
+            src={(typeof brandLogo === 'string' ? brandLogo : (brandLogo as any)?.src) || "/MyDocBD-logo2.png"} 
             alt="MyDocBD - ডিজিটাল হেলথ ডিরেক্টরি" 
             className="h-9 md:h-11 w-auto object-contain" 
           />

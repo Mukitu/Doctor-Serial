@@ -47,6 +47,35 @@ export default function AdminBannersPage() {
 
   useEffect(() => {
     loadData();
+
+    let channel: any = null;
+    let pollInterval: any = null;
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        channel = supabase
+          .channel('admin-banners-realtime-channel')
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'promo_banners' }, () => {
+            loadData();
+          })
+          .subscribe();
+      } catch (err) {
+        console.warn('Banners Realtime notice:', err);
+      }
+
+      pollInterval = setInterval(() => {
+        loadData();
+      }, 3000);
+    }
+
+    return () => {
+      if (channel && supabase) {
+        supabase.removeChannel(channel);
+      }
+      if (pollInterval) {
+        clearInterval(pollInterval);
+      }
+    };
   }, []);
 
   const loadData = async () => {

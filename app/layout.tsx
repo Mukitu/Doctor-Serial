@@ -1,9 +1,9 @@
 import type { Metadata } from 'next';
 import React from 'react';
 import appIcon from '@/app/about/MyDocBD-App-Icon.png';
-import brandLogo from '@/app/about/MyDocBD-Logo.png';
+import brandLogo from '@/app/about/MyDocBD-logo2.png';
 
-const logoSrc = typeof brandLogo === 'string' ? brandLogo : (brandLogo as any)?.src || '/about/MyDocBD-Logo.png';
+const logoSrc = typeof brandLogo === 'string' ? brandLogo : (brandLogo as any)?.src || '/about/MyDocBD-logo2.png';
 const appIconSrc = typeof appIcon === 'string' ? appIcon : (appIcon as any)?.src || '/about/MyDocBD-App-Icon.png';
 
 export const metadata: Metadata = {

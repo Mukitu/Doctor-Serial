@@ -22,7 +22,7 @@ import {
   Info
 } from 'lucide-react';
 import { Doctor, Review } from '../types';
-import { getReviews, submitVerifiedPatientReview } from '../lib/supabase';
+import { getReviews, submitVerifiedPatientReview, parseVisitingDays } from '../lib/supabase';
 import PromoBannerComponent from './PromoBanner';
 
 interface DoctorProfileModalProps {
@@ -308,7 +308,7 @@ export default function DoctorProfileModal({
 
                 <div className="flex items-center gap-2 p-2.5 rounded-lg bg-emerald-50/60 border border-emerald-100 text-xs font-semibold text-emerald-800">
                   <Calendar className="h-4 w-4 text-emerald-600 shrink-0" />
-                  <span>রোগী দেখার দিনসমূহ: {Array.isArray(ch.visitingDays) ? ch.visitingDays.join(', ') : 'সবদিন'}</span>
+                  <span>রোগী দেখার দিনসমূহ: {parseVisitingDays(ch.visitingDays).length > 0 ? parseVisitingDays(ch.visitingDays).join(', ') : 'নির্ধারিত হয়নি'}</span>
                 </div>
               </div>
             ))}

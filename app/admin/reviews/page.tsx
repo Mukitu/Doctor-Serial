@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Star, PlusCircle, Trash2, Check, Loader2, Calendar, User, MessageSquare, AlertCircle, X } from 'lucide-react';
 import { Doctor, Review } from '../../../src/types';
-import { getDoctors, getReviews, addAdminReview, deleteReview } from '../../../src/lib/supabase';
+import { supabase, isSupabaseConfigured, getDoctors, getReviews, addAdminReview, deleteReview } from '../../../src/lib/supabase';
 
 export default function AdminReviewsPage() {
   const [doctors, setDoctors] = useState<Doctor[]>([]);
@@ -21,6 +21,35 @@ export default function AdminReviewsPage() {
 
   useEffect(() => {
     loadData();
+
+    let channel: any = null;
+    let pollInterval: any = null;
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        channel = supabase
+          .channel('admin-reviews-realtime-channel')
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'reviews' }, () => {
+            loadData();
+          })
+          .subscribe();
+      } catch (err) {
+        console.warn('Reviews Realtime notice:', err);
+      }
+
+      pollInterval = setInterval(() => {
+        loadData();
+      }, 3000);
+    }
+
+    return () => {
+      if (channel && supabase) {
+        supabase.removeChannel(channel);
+      }
+      if (pollInterval) {
+        clearInterval(pollInterval);
+      }
+    };
   }, []);
 
   const loadData = async () => {

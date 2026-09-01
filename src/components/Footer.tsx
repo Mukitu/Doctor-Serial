@@ -1,6 +1,6 @@
 import React from 'react';
 import { ShieldCheck, PhoneCall } from 'lucide-react';
-import brandLogo from '@/app/about/MyDocBD-Logo.png';
+import brandLogo from '@/app/about/MyDocBD-logo2.png';
 import { ActiveTab } from '../types';
 
 interface FooterProps {
@@ -20,11 +20,11 @@ export default function Footer({ activeTab, setActiveTab }: FooterProps) {
         <div className="grid gap-8 md:grid-cols-4">
           {/* Logo and Brand Info */}
           <div className="md:col-span-1 space-y-3">
-            <div className="inline-block bg-white px-3 py-1.5 rounded-xl border border-slate-100 shadow-sm mb-3">
+            <div className="mb-3 inline-block">
               <img 
-                src="/MyDocBD-Logo.png" 
+                src={(typeof brandLogo === 'string' ? brandLogo : (brandLogo as any)?.src) || "/MyDocBD-logo2.png"} 
                 alt="MyDocBD Logo" 
-                className="h-8 md:h-9 w-auto object-contain" 
+                className="h-9 md:h-11 w-auto object-contain" 
               />
             </div>
             <p className="text-xs text-slate-400 leading-relaxed font-semibold">

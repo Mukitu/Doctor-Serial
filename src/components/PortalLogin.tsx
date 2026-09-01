@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import brandLogo from '@/app/about/MyDocBD-Logo.png';
+import brandLogo from '@/app/about/MyDocBD-logo2.png';
 import { KeyRound, Mail, AlertCircle, Loader2 } from 'lucide-react';
 import { AdminProfile } from '../types';
 import { signIn } from '../lib/supabase';
@@ -51,7 +51,7 @@ export default function PortalLogin({ onLoginSuccess }: PortalLoginProps) {
         {/* Branding & Logo header */}
         <div className="text-center flex flex-col items-center">
           <img 
-            src="/MyDocBD-Logo.png" 
+            src={(typeof brandLogo === 'string' ? brandLogo : (brandLogo as any)?.src) || "/MyDocBD-logo2.png"} 
             alt="MyDocBD Brand Logo" 
             className="h-12 w-auto object-contain mx-auto mb-2" 
           />

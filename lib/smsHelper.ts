@@ -89,19 +89,30 @@ export function generateSmsText(data: SmsTemplateData): string {
   const visitingTime = (data.visitingTime || 'নির্ধারিত সময়').trim();
   const apptDate = (data.date || 'আজ/আগামীকাল').trim();
 
-  // Determine current host domain or default to mydocbd.com
-  let host = 'mydocbd.com';
-  if (typeof window !== 'undefined' && window.location && window.location.host) {
-    host = window.location.host;
+  // Determine current base origin URL (e.g., https://mydocbd.com or dynamic domain)
+  let origin = '';
+  if (typeof window !== 'undefined' && window.location && window.location.origin) {
+    origin = window.location.origin.replace(/\/$/, '');
+  }
+  
+  if (!origin || origin === 'null') {
+    let host = 'mydocbd.com';
+    if (typeof window !== 'undefined' && window.location && window.location.host) {
+      host = window.location.host;
+    }
+    origin = `https://${host.replace(/\/$/, '')}`;
   }
 
   let trackLink = '';
   if (data.trackingUrl) {
-    trackLink = data.trackingUrl.startsWith('http') ? data.trackingUrl : `https://${data.trackingUrl}`;
+    const cleanUrl = data.trackingUrl.trim().replace(/^["']|["']$/g, '');
+    trackLink = cleanUrl.startsWith('http') 
+      ? cleanUrl 
+      : `${origin}/${cleanUrl.replace(/^\//, '')}`;
   } else if (data.trackingCode) {
-    trackLink = `https://${host}/track?code=${encodeURIComponent(data.trackingCode)}`;
+    trackLink = `${origin}/track?code=${encodeURIComponent(data.trackingCode.trim())}`;
   } else {
-    trackLink = `https://${host}/track`;
+    trackLink = `${origin}/track`;
   }
 
   let sms = `MyDocBD: সিরিয়াল নিশ্চিত।\n`;

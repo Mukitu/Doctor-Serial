@@ -125,7 +125,7 @@ export default function DoctorFormModal({
           const matchedFac = facilities.find(f => f.id === ch.facilityId || f.id === (ch as any).facility_id || f.name === ch.facilityName || f.name === (ch as any).facility);
           const facId = ch.facilityId || (ch as any).facility_id || matchedFac?.id || '';
           
-          let daysArr: string[] = ['সবদিন'];
+          let daysArr: string[] = ['শনিবার', 'রবিবার', 'সোমবার'];
           if (Array.isArray(ch.visitingDays) && ch.visitingDays.length > 0) {
             daysArr = ch.visitingDays;
           } else if (typeof (ch as any).visiting_days === 'string' && (ch as any).visiting_days.trim()) {
@@ -159,7 +159,7 @@ export default function DoctorFormModal({
         const matchedFac = facilities.find(f => f.id === doctor.facilityId || f.id === (doctor as any).facility_id || f.name === doctor.facilityName || f.name === doctor.facility);
         const facId = doctor.facilityId || (doctor as any).facility_id || matchedFac?.id || '';
         
-        let daysArr: string[] = ['সবদিন'];
+        let daysArr: string[] = ['শনিবার', 'রবিবার', 'সোমবার'];
         if (Array.isArray(doctor.visitingDays) && doctor.visitingDays.length > 0) {
           daysArr = doctor.visitingDays;
         } else if (typeof (doctor as any).visiting_days === 'string' && (doctor as any).visiting_days.trim()) {
@@ -219,8 +219,8 @@ export default function DoctorFormModal({
           floor: '',
           buildingStand: '',
           building_info: '',
-          visitingDays: ['সবদিন'],
-          visiting_days: ['সবদিন'],
+          visitingDays: ['শনিবার', 'রবিবার', 'সোমবার'],
+          visiting_days: ['শনিবার', 'রবিবার', 'সোমবার'],
           visitingTime: '',
           visiting_time: '',
           feeNew: 0,
@@ -330,8 +330,8 @@ export default function DoctorFormModal({
         floor: '',
         buildingStand: '',
         building_info: '',
-        visitingDays: ['সবদিন'],
-        visiting_days: ['সবদিন'],
+        visitingDays: ['শনিবার', 'রবিবার', 'সোমবার'],
+        visiting_days: ['শনিবার', 'রবিবার', 'সোমবার'],
         visitingTime: '',
         visiting_time: '',
         feeNew: 0,
@@ -449,7 +449,7 @@ export default function DoctorFormModal({
         roomNo: ch.roomNo?.trim() || ch.room_no?.trim() || '',
         floor: ch.floor?.trim() || ch.floor?.trim() || '',
         buildingStand: ch.buildingStand?.trim() || ch.building_info?.trim() || '',
-        visitingDays: ch.visitingDays && ch.visitingDays.length > 0 ? ch.visitingDays : ['সবদিন'],
+        visitingDays: ch.visitingDays && ch.visitingDays.length > 0 ? ch.visitingDays : ['শনিবার', 'রবিবার', 'সোমবার'],
         visitingTime: ch.visitingTime?.trim() || ch.visiting_time?.trim() || '',
         feeNew: feeNewNum != null && !isNaN(feeNewNum) ? feeNewNum : 0,
         feeOld: feeOldNum != null && !isNaN(feeOldNum) ? feeOldNum : 0

@@ -46,25 +46,28 @@ const BENGALI_DAY_NAMES: Record<number, string> = {
 };
 
 export function getVisitingDaysArray(daysInput: any): string[] {
-  if (!daysInput) return ['সবদিন'];
+  if (!daysInput) return [];
+  let raw: string[] = [];
   if (Array.isArray(daysInput)) {
-    return daysInput.length > 0 ? daysInput : ['সবদিন'];
+    raw = daysInput.map(s => String(s).trim());
+  } else if (typeof daysInput === 'string') {
+    raw = daysInput.split(',').map(s => s.trim());
   }
-  if (typeof daysInput === 'string') {
-    const split = daysInput.split(',').map(s => s.trim()).filter(Boolean);
-    return split.length > 0 ? split : ['সবদিন'];
-  }
-  return ['সবদিন'];
+  return raw.filter(s => {
+    if (!s) return false;
+    const lower = s.toLowerCase();
+    return lower !== 'সবদিন' && lower !== 'প্রতিদিন' && lower !== 'everyday' && lower !== 'all' && lower !== 'daily';
+  });
 }
 
-export function isDateValidForVisitingDays(dateStr: string, visitingDays: string[] | string): { isValid: boolean; selectedDayNameBn: string } {
+export function isDateValidForVisitingDays(dateStr: string, visitingDays: string[] | string): { isValid: boolean; selectedDayNameBn: string; formattedFullDateBn: string } {
   const daysArr = getVisitingDaysArray(visitingDays);
-  if (!dateStr || !daysArr || daysArr.length === 0) {
-    return { isValid: true, selectedDayNameBn: '' };
+  if (!dateStr) {
+    return { isValid: true, selectedDayNameBn: '', formattedFullDateBn: '' };
   }
 
   const parts = dateStr.split('-');
-  if (parts.length !== 3) return { isValid: true, selectedDayNameBn: '' };
+  if (parts.length !== 3) return { isValid: true, selectedDayNameBn: '', formattedFullDateBn: '' };
 
   const year = parseInt(parts[0], 10);
   const month = parseInt(parts[1], 10) - 1;
@@ -76,22 +79,24 @@ export function isDateValidForVisitingDays(dateStr: string, visitingDays: string
   const aliases = DAY_MAP[dayIdx] || [];
   const selectedDayNameBn = BENGALI_DAY_NAMES[dayIdx] || '';
 
-  // Check if visiting days list contains all days / সবদিন
-  const isAllDays = daysArr.some(vd => {
-    const vdClean = vd.toLowerCase().trim();
-    return vdClean.includes('সবদিন') || vdClean.includes('প্রতিদিন') || vdClean.includes('all');
-  });
+  const bnDigits = ['০', '১', '২', '৩', '৪', '৫', '৬', '৭', '৮', '৯'];
+  const bnMonths = ['জানুয়ারি', 'ফেব্রুয়ারি', 'মার্চ', 'এপ্রিল', 'মে', 'জুন', 'জুলাই', 'আগস্ট', 'সেপ্টেম্বর', 'অক্টোবর', 'নভেম্বর', 'ডিসেম্বর'];
+  
+  const dayNumStr = String(day).replace(/\d/g, m => bnDigits[parseInt(m, 10)]);
+  const yearStr = String(year).replace(/\d/g, m => bnDigits[parseInt(m, 10)]);
+  const monthStr = bnMonths[month] || '';
+  const formattedFullDateBn = `${selectedDayNameBn}, ${dayNumStr} ${monthStr} ${yearStr}`;
 
-  if (isAllDays) {
-    return { isValid: true, selectedDayNameBn };
+  if (!daysArr || daysArr.length === 0) {
+    return { isValid: false, selectedDayNameBn, formattedFullDateBn };
   }
 
   const isValid = daysArr.some(vd => {
     const vdClean = vd.toLowerCase().trim();
-    return aliases.some(alias => vdClean.includes(alias) || alias.includes(vdClean));
+    return aliases.some(alias => vdClean === alias || vdClean.includes(alias) || alias.includes(vdClean));
   });
 
-  return { isValid, selectedDayNameBn };
+  return { isValid, selectedDayNameBn, formattedFullDateBn };
 }
 
 export function getFirstAvailableDate(visitingDays: string[], maxDaysAhead: number = 30): string {
@@ -111,14 +116,14 @@ export function getFirstAvailableDate(visitingDays: string[], maxDaysAhead: numb
   return new Date().toISOString().split('T')[0];
 }
 
-export function getUpcomingDatesWithStatus(visitingDays: string[], count: number = 14) {
-  const result: { dateStr: string; dayNameBn: string; formattedDateBn: string; isValid: boolean }[] = [];
+export function getUpcomingValidDatesInMonth(visitingDays: string[] | string, daysAhead: number = 45) {
+  const result: { dateStr: string; dayNameBn: string; formattedDateBn: string; fullDateBn: string }[] = [];
   const now = new Date();
   const daysArr = getVisitingDaysArray(visitingDays);
   const bnDigits = ['০', '১', '২', '৩', '৪', '৫', '৬', '৭', '৮', '৯'];
   const bnMonths = ['জানু', 'ফেব্রু', 'মার্চ', 'এপ্রিল', 'মে', 'জুন', 'জুলাই', 'আগস্ট', 'সেপ্টে', 'অক্টো', 'নভে', 'ডিসে'];
 
-  for (let i = 0; i < count; i++) {
+  for (let i = 0; i < daysAhead; i++) {
     const d = new Date(now.getTime() + i * 24 * 60 * 60 * 1000);
     const year = d.getFullYear();
     const month = String(d.getMonth() + 1).padStart(2, '0');
@@ -126,16 +131,18 @@ export function getUpcomingDatesWithStatus(visitingDays: string[], count: number
     const dateStr = `${year}-${month}-${day}`;
 
     const check = isDateValidForVisitingDays(dateStr, daysArr);
-    const dayNumStr = String(d.getDate()).replace(/\d/g, m => bnDigits[parseInt(m, 10)]);
-    const monthStr = bnMonths[d.getMonth()];
-    const formattedDateBn = `${dayNumStr} ${monthStr}`;
+    if (check.isValid) {
+      const dayNumStr = String(d.getDate()).replace(/\d/g, m => bnDigits[parseInt(m, 10)]);
+      const monthStr = bnMonths[d.getMonth()];
+      const formattedDateBn = `${dayNumStr} ${monthStr}`;
 
-    result.push({
-      dateStr,
-      dayNameBn: check.selectedDayNameBn || BENGALI_DAY_NAMES[d.getDay()] || '',
-      formattedDateBn,
-      isValid: check.isValid,
-    });
+      result.push({
+        dateStr,
+        dayNameBn: check.selectedDayNameBn || BENGALI_DAY_NAMES[d.getDay()] || '',
+        formattedDateBn,
+        fullDateBn: check.formattedFullDateBn,
+      });
+    }
   }
   return result;
 }
@@ -146,6 +153,8 @@ export default function BookingModal({
   onAddAppointment,
   onNavigateToTrack,
 }: BookingModalProps) {
+  if (!doctor) return null;
+
   // Form fields
   const [patientName, setPatientName] = useState('');
   const [patientAge, setPatientAge] = useState('');
@@ -186,6 +195,9 @@ export default function BookingModal({
 
   const [selectedChamberIndex, setSelectedChamberIndex] = useState(0);
 
+  // Selected chamber details
+  const currentChamber = chambersList[selectedChamberIndex] || chambersList[0];
+
   // Auto-set preferredDate to first available visiting day on load/chamber change
   React.useEffect(() => {
     if (currentChamber) {
@@ -196,18 +208,24 @@ export default function BookingModal({
     }
   }, [selectedChamberIndex, currentChamber]);
 
-  // Compute upcoming dates with availability status
-  const upcomingDateCards = useMemo(() => {
+  // Compute upcoming valid visiting dates in the month
+  const upcomingValidDates = useMemo(() => {
     if (!currentChamber) return [];
-    return getUpcomingDatesWithStatus(currentChamber.visitingDays || [], 14);
+    return getUpcomingValidDatesInMonth(currentChamber.visitingDays || [], 45);
   }, [currentChamber]);
+
+  // Day validation computation
+  const dayValidation = useMemo(() => {
+    if (!preferredDate || !currentChamber) {
+      return { isValid: true, selectedDayNameBn: '' };
+    }
+    return isDateValidForVisitingDays(preferredDate, currentChamber.visitingDays || []);
+  }, [preferredDate, currentChamber]);
 
   // Status and tracking states
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [generatedId, setGeneratedId] = useState('');
   const [error, setError] = useState('');
-
-  if (!doctor) return null;
 
   // Generate date bounds (from today to 30 days from now)
   const todayStr = new Date().toISOString().split('T')[0];
@@ -377,7 +395,7 @@ export default function BookingModal({
                         <div className="mt-1.5 flex items-center gap-1.5 text-[11px] font-bold text-sky-800">
                           <Calendar className="h-3.5 w-3.5 text-[#0284C7] shrink-0" />
                           <span>
-                            বসার দিনসমূহ: {Array.isArray(ch.visitingDays) && ch.visitingDays.length > 0 ? ch.visitingDays.join(', ') : 'সবদিন'}
+                            বসার দিনসমূহ: {getVisitingDaysArray(ch.visitingDays).length > 0 ? getVisitingDaysArray(ch.visitingDays).join(', ') : 'নির্ধারিত হয়নি'}
                           </span>
                         </div>
                       </div>
@@ -456,79 +474,29 @@ export default function BookingModal({
                   </div>
                 </div>
 
-              {/* Preferred Date Selector & Interactive Calendar Grid */}
+              {/* Preferred Date Selector & Calendar Picker */}
               <div className="flex flex-col gap-3 pt-2">
-                <div className="flex flex-wrap items-center justify-between gap-1">
-                  <label className="text-[11px] font-bold text-slate-700 flex items-center gap-1.5">
-                    <Calendar className="h-3.5 w-3.5 text-[#0284C7]" />
-                    <span>সিরিয়ালের কাঙ্ক্ষিত তারিখ নির্বাচন করুন *</span>
-                  </label>
-                  <div className="flex flex-wrap items-center gap-1">
-                    <span className="text-[10px] font-bold text-slate-400">ডাক্তারের বসার দিন:</span>
+                <div className="flex flex-wrap items-center justify-between gap-1.5 p-3 rounded-xl bg-slate-50 border border-slate-200/80">
+                  <div className="flex items-center gap-2">
+                    <Calendar className="h-4 w-4 text-[#0284C7]" />
+                    <span className="text-xs font-bold text-slate-800">সিরিয়ালের কাঙ্ক্ষিত তারিখ নির্বাচন করুন *</span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="text-[10px] font-bold text-slate-500">ডাক্তারের নির্ধারিত বসার দিনসমূহ:</span>
                     {getVisitingDaysArray(currentChamber?.visitingDays).map((d, idx) => (
-                      <span key={idx} className="inline-flex rounded bg-[#0284C7]/10 px-1.5 py-0.5 text-[9px] font-bold text-[#0284C7] border border-[#0284C7]/20">
+                      <span key={idx} className="inline-flex rounded-md bg-[#0284C7]/10 px-2.5 py-1 text-[11px] font-black text-[#0284C7] border border-[#0284C7]/20 shadow-2xs">
                         {d}
                       </span>
                     ))}
                   </div>
                 </div>
 
-                {/* Visual Available Dates Card Grid (Next 14 Days) */}
+                {/* Calendar Input for Date Selection */}
                 <div className="flex flex-col gap-1.5">
-                  <span className="text-[10px] font-bold text-slate-500">
-                    সহজে তারিখ বেছে নিন (পরবর্তী ১৪ দিন):
-                  </span>
-                  
-                  <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-1.5 p-2 bg-slate-50/80 rounded-xl border border-slate-200/80">
-                    {upcomingDateCards.map((item) => {
-                      const isSelected = preferredDate === item.dateStr;
-                      return (
-                        <button
-                          key={item.dateStr}
-                          type="button"
-                          disabled={!item.isValid}
-                          onClick={() => {
-                            if (item.isValid) {
-                              setPreferredDate(item.dateStr);
-                              setError('');
-                            }
-                          }}
-                          className={`flex flex-col items-center justify-center p-2 rounded-lg border text-center transition-all ${
-                            !item.isValid
-                              ? 'bg-slate-100/90 border-slate-200 text-slate-400 opacity-45 cursor-not-allowed select-none line-through'
-                              : isSelected
-                              ? 'bg-[#0284C7] border-[#0284C7] text-white shadow-xs font-bold ring-2 ring-[#0284C7]/30 scale-[1.02]'
-                              : 'bg-white border-slate-200 text-slate-800 hover:border-[#0284C7] hover:bg-sky-50/50 cursor-pointer'
-                          }`}
-                          title={!item.isValid ? `${item.dayNameBn} ডাক্তার এই চেম্বারে বসেন না (লক)` : `${item.dayNameBn} (${item.formattedDateBn}) - উপলব্ধ`}
-                        >
-                          <span className={`text-[10px] font-extrabold ${!item.isValid ? 'text-rose-400' : isSelected ? 'text-white' : 'text-slate-500'}`}>
-                            {item.dayNameBn} {!item.isValid && '🔒'}
-                          </span>
-                          <span className={`text-xs font-black ${isSelected ? 'text-white' : 'text-slate-800'}`}>
-                            {item.formattedDateBn}
-                          </span>
-                          <span className={`text-[8px] mt-1 px-1 py-0.2 rounded font-extrabold ${
-                            !item.isValid
-                              ? 'bg-rose-100 text-rose-600 border border-rose-200/50'
-                              : isSelected
-                              ? 'bg-white/20 text-white'
-                              : 'bg-emerald-50 text-emerald-700 border border-emerald-200/40'
-                          }`}>
-                            {!item.isValid ? 'বসেন না' : isSelected ? 'সিলেক্টেড' : 'খালি আছে'}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Custom Date Input for dates further in future */}
-                <div className="flex flex-col gap-1 mt-1">
-                  <span className="text-[10px] font-bold text-slate-500">
-                    অথবা অন্য কোন তারিখ ম্যানুয়ালি বেছে নিন:
-                  </span>
-                  <div className="relative max-w-xs">
+                  <label className="text-[11px] font-bold text-slate-600">
+                    ক্যালেন্ডার থেকে তারিখ নির্বাচন করুন:
+                  </label>
+                  <div className="relative max-w-sm">
                     <input
                       type="date"
                       required
@@ -546,23 +514,29 @@ export default function BookingModal({
                         if (!check.isValid) {
                           setPreferredDate('');
                           const daysListStr = getVisitingDaysArray(currentChamber?.visitingDays).join(', ');
-                          setError(`নির্বাচিত তারিখে (${check.selectedDayNameBn}) ডা. ${doctor.name} এই চেম্বারে বসেন না। বসার নির্ধারিত দিন: [${daysListStr}]`);
+                          setError(`⚠️ দুঃখিত, এই তারিখে ডাক্তার বসেন না! আপনি [${check.selectedDayNameBn}] সিলেক্ট করেছেন। ডাক্তারের নির্ধারিত বসার দিন: [${daysListStr}]।`);
                           return;
                         }
                         setError('');
                         setPreferredDate(dateVal);
                       }}
-                      className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-9 pr-3 text-xs font-bold text-slate-800 focus:border-[#0284C7] focus:outline-none"
+                      className={`w-full rounded-lg border py-2.5 pl-9 pr-3.5 text-xs font-bold text-slate-800 focus:outline-none transition ${
+                        preferredDate
+                          ? 'border-emerald-500 bg-emerald-50/30 ring-2 ring-emerald-500/20'
+                          : 'border-slate-200 bg-white focus:border-[#0284C7]'
+                      }`}
                       id="input-booking-date"
                     />
-                    <Calendar className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
+                    <Calendar className="absolute left-2.5 top-3 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
                   </div>
 
                   {preferredDate && (
-                    <span className="text-[10px] font-bold text-emerald-600 flex items-center gap-1 mt-0.5">
-                      <Check className="h-3 w-3" />
-                      <span>সঠিক তারিখ নির্বাচিত হয়েছে ({isDateValidForVisitingDays(preferredDate, currentChamber?.visitingDays || []).selectedDayNameBn})</span>
-                    </span>
+                    <div className="flex items-center gap-2 p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-[11px] font-bold mt-1">
+                      <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                      <span>
+                        সঠিক তারিখ নির্বাচিত হয়েছে: {isDateValidForVisitingDays(preferredDate, currentChamber?.visitingDays || []).formattedFullDateBn}
+                      </span>
+                    </div>
                   )}
                 </div>
               </div>

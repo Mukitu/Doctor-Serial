@@ -258,6 +258,35 @@ export default function AdminAppointmentsPage() {
 
   useEffect(() => {
     fetchAppointmentsAndDoctors();
+
+    let channel: any = null;
+    let pollInterval: any = null;
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        channel = supabase
+          .channel('admin-appointments-realtime-channel')
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'appointments' }, () => {
+            fetchAppointmentsAndDoctors();
+          })
+          .subscribe();
+      } catch (err) {
+        console.warn('Appointments Realtime subscription notice:', err);
+      }
+
+      pollInterval = setInterval(() => {
+        fetchAppointmentsAndDoctors();
+      }, 3000);
+    }
+
+    return () => {
+      if (channel && supabase) {
+        supabase.removeChannel(channel);
+      }
+      if (pollInterval) {
+        clearInterval(pollInterval);
+      }
+    };
   }, [fetchAppointmentsAndDoctors]);
 
   // Reset Filters

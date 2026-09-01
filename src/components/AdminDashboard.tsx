@@ -29,6 +29,8 @@ import {
 } from 'lucide-react';
 import { Doctor, Appointment, Specialty, Facility, AdminProfile, District, Review, BlogPost, PromoBanner, BannerPlacementSlot } from '../types';
 import { 
+  supabase,
+  isSupabaseConfigured,
   getAdmins, 
   createAdminUser, 
   updateAdminRole, 
@@ -247,6 +249,37 @@ export default function AdminDashboard({
   useEffect(() => {
     loadBlogsList();
     loadBannersList();
+
+    let channel: any = null;
+    let pollInterval: any = null;
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        channel = supabase
+          .channel('admin-dashboard-global-sync')
+          .on('postgres_changes', { event: '*', schema: 'public' }, () => {
+            loadBlogsList();
+            loadBannersList();
+          })
+          .subscribe();
+      } catch (err) {
+        console.warn('AdminDashboard Realtime notice:', err);
+      }
+
+      pollInterval = setInterval(() => {
+        loadBlogsList();
+        loadBannersList();
+      }, 3000);
+    }
+
+    return () => {
+      if (channel && supabase) {
+        supabase.removeChannel(channel);
+      }
+      if (pollInterval) {
+        clearInterval(pollInterval);
+      }
+    };
   }, []);
 
   // Set default district id on first load

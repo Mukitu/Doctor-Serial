@@ -9,6 +9,7 @@ import {
   Star
 } from 'lucide-react';
 import { Doctor } from '../types';
+import { parseVisitingDays } from '../lib/supabase';
 
 interface DoctorCardProps {
   key?: string | number;
@@ -177,7 +178,7 @@ export default function DoctorCard({
                 <div className="flex items-start gap-1.5">
                   <Calendar className="h-3 w-3 text-slate-400 shrink-0 mt-0.5" />
                   <span>
-                    দিনসমূহ: {Array.isArray(ch.visitingDays) && ch.visitingDays.length > 0 ? ch.visitingDays.join(', ') : 'সবদিন'}
+                    দিনসমূহ: {parseVisitingDays(ch.visitingDays).length > 0 ? parseVisitingDays(ch.visitingDays).join(', ') : 'নির্ধারিত হয়নি'}
                   </span>
                 </div>
               </div>

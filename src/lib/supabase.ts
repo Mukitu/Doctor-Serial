@@ -13,6 +13,22 @@ import {
 const supabaseUrl = (import.meta as any).env.VITE_SUPABASE_URL || '';
 const supabaseAnonKey = (import.meta as any).env.VITE_SUPABASE_ANON_KEY || '';
 
+// Helper function to safely parse visiting days regardless of array or string input
+export function parseVisitingDays(input: any): string[] {
+  if (!input) return [];
+  let raw: string[] = [];
+  if (Array.isArray(input)) {
+    raw = input.map(s => String(s).trim());
+  } else if (typeof input === 'string') {
+    raw = input.split(',').map(s => s.trim());
+  }
+  return raw.filter(s => {
+    if (!s) return false;
+    const lower = s.toLowerCase();
+    return lower !== 'সবদিন' && lower !== 'প্রতিদিন' && lower !== 'everyday' && lower !== 'all' && lower !== 'daily';
+  });
+}
+
 export const isSupabaseConfigured = 
   supabaseUrl && 
   supabaseUrl !== 'your-supabase-project-url' && 
@@ -709,7 +725,7 @@ export async function getDoctors(): Promise<Doctor[]> {
           roomNo: dc.room_no || '',
           floor: dc.floor || 'নিচতলা',
           buildingStand: dc.building_stand || 'মেইন বিল্ডিং',
-          visitingDays: dc.visiting_days ? dc.visiting_days.split(',').map((d: string) => d.trim()) : [],
+          visitingDays: parseVisitingDays(dc.visiting_days || dc.visitingDays),
           visitingTime: dc.visiting_time || '',
           feeNew: dc.fee_new || 0,
           feeOld: dc.fee_old || 0
@@ -944,7 +960,7 @@ export async function updateDoctor(doc: Doctor): Promise<void> {
           roomNo: doc.chamberRoomNo || '',
           floor: doc.chamberFloor || 'নিচতলা',
           buildingStand: doc.chamberBuildingStand || 'মেইন বিল্ডিং',
-          visitingDays: doc.visitingDays || ['সবদিন'],
+          visitingDays: doc.visitingDays || ['শনিবার', 'রবিবার', 'সোমবার', 'মঙ্গলবার', 'বুধবার'],
           visitingTime: doc.visitingTime || '',
           feeNew: doc.feesNew || 0,
           feeOld: doc.feesOld || 0
@@ -1169,13 +1185,13 @@ export async function upsertDoctorWithChambers(
       roomNo: doctor.chamberRoomNo || '',
       floor: doctor.chamberFloor || 'নিচতলা',
       buildingStand: doctor.chamberBuildingStand || 'মেইন বিল্ডিং',
-      visitingDays: doctor.visitingDays || ['সবদিন'],
+      visitingDays: doctor.visitingDays || ['শনিবার', 'রবিবার', 'সোমবার', 'মঙ্গলবার', 'বুধবার'],
       visitingTime: doctor.visitingTime || '',
       feeNew: doctor.feesNew || 0,
       feeOld: doctor.feesOld || 0
     }
   ]).map((ch: any, idx: number) => {
-    let daysArr: string[] = ['সবদিন'];
+    let daysArr: string[] = ['শনিবার', 'রবিবার', 'সোমবার', 'মঙ্গলবার', 'বুধবার'];
     if (Array.isArray(ch.visitingDays) && ch.visitingDays.length > 0) {
       daysArr = ch.visitingDays;
     } else if (Array.isArray(ch.visiting_days) && ch.visiting_days.length > 0) {
@@ -1242,7 +1258,7 @@ export async function upsertDoctorWithChambers(
     chamberRoomNo: firstChamber.roomNo || '',
     chamberFloor: firstChamber.floor || 'নিচতলা',
     chamberBuildingStand: firstChamber.buildingStand || 'মেইন বিল্ডিং',
-    visitingDays: firstChamber.visitingDays || ['সবদিন'],
+    visitingDays: firstChamber.visitingDays || ['শনিবার', 'রবিবার', 'সোমবার', 'মঙ্গলবার', 'বুধবার'],
     visitingTime: firstChamber.visitingTime || '',
     feesNew: firstChamber.feeNew || 0,
     feesOld: firstChamber.feeOld || 0,
@@ -1469,7 +1485,7 @@ export async function upsertDoctorWithChambers(
 
         const daysStr = Array.isArray(ch.visitingDays) 
           ? ch.visitingDays.join(', ') 
-          : (ch.visitingDays || ch.visiting_days || 'সবদিন');
+          : (ch.visitingDays || ch.visiting_days || '');
 
         return {
           id: validChId,
