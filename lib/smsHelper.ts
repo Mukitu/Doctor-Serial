@@ -42,11 +42,13 @@ export interface SmsTemplateData {
   visitingTime?: string;
   date?: string;
   specialInstructions?: string;
+  trackingCode?: string;
+  trackingUrl?: string;
 }
 
 /**
  * Concise & Highly Informative Bangla SMS Template
- * Automatically embeds patient name, doctor name, clinic/chamber, serial no, room, floor, building, and visiting time.
+ * Automatically embeds patient name, doctor name, clinic/chamber, serial no, room, floor, building, visiting time, and direct tracking link.
  */
 export function generateSmsText(data: SmsTemplateData): string {
   const patient = (data.patientName || 'রোগী').trim();
@@ -87,6 +89,21 @@ export function generateSmsText(data: SmsTemplateData): string {
   const visitingTime = (data.visitingTime || 'নির্ধারিত সময়').trim();
   const apptDate = (data.date || 'আজ/আগামীকাল').trim();
 
+  // Determine current host domain or default to mydocbd.com
+  let host = 'mydocbd.com';
+  if (typeof window !== 'undefined' && window.location && window.location.host) {
+    host = window.location.host;
+  }
+
+  let trackLink = '';
+  if (data.trackingUrl) {
+    trackLink = data.trackingUrl.startsWith('http') ? data.trackingUrl : `https://${data.trackingUrl}`;
+  } else if (data.trackingCode) {
+    trackLink = `https://${host}/track?code=${encodeURIComponent(data.trackingCode)}`;
+  } else {
+    trackLink = `https://${host}/track`;
+  }
+
   let sms = `MyDocBD: সিরিয়াল নিশ্চিত।\n`;
   sms += `রোগী: ${patient}\n`;
   sms += `${doctor}\n`;
@@ -99,7 +116,7 @@ export function generateSmsText(data: SmsTemplateData): string {
   if (data.specialInstructions && data.specialInstructions.trim()) {
     sms += `নির্দেশনা: ${data.specialInstructions.trim()}\n`;
   }
-  sms += `ট্র্যাক: mydocbd.com`;
+  sms += `ট্র্যাক করতে ভিজিট করুন: ${trackLink}`;
 
   return sms;
 }

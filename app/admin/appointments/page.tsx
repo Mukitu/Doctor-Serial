@@ -649,7 +649,8 @@ export default function AdminAppointmentsPage() {
                     building,
                     visitingTime,
                     date: preferredDate,
-                    specialInstructions: item.special_instructions || item.admin_notes || item.adminNotes
+                    specialInstructions: item.special_instructions || item.admin_notes || item.adminNotes,
+                    trackingCode: item.booking_code || item.id || item.bookingCode
                   });
                   const quickSmsUri = getSmsUri(patientPhone, quickSmsText);
 

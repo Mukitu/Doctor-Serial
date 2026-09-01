@@ -163,7 +163,8 @@ export default function ConfirmAppointmentModal({
     building: assignedBuilding,
     visitingTime: confirmedVisitingTime,
     date: appointmentDate,
-    specialInstructions: specialInstructions
+    specialInstructions: specialInstructions,
+    trackingCode: appointment.booking_code || appointment.id || appointment.bookingCode
   });
 
   const smsUri = getSmsUri(patientMobile, smsText);

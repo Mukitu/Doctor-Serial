@@ -57,14 +57,7 @@ export default function AppointmentTracker({ appointments, doctors = [] }: Appoi
 
     const phoneQuery = searchQuery.trim();
     if (!phoneQuery) {
-      setValidationError('অনুগ্রহ করে আপনার ১১ ডিজিটের মোবাইল নম্বরটি লিখুন।');
-      setResults([]);
-      return;
-    }
-
-    // Strictly validate 11-digit mobile number format
-    if (!/^(01)[3-9]\d{8}$/.test(phoneQuery)) {
-      setValidationError('অনুগ্রহ করে একটি সঠিক ১১ ডিজিটের মোবাইল নম্বর লিখুন (যেমন: 017XXXXXXXX)।');
+      setValidationError('অনুগ্রহ করে আপনার ১১ ডিজিটের মোবাইল নম্বর অথবা ট্র্যাকিং কোড লিখুন।');
       setResults([]);
       return;
     }
@@ -72,7 +65,7 @@ export default function AppointmentTracker({ appointments, doctors = [] }: Appoi
     if (isSupabaseConfigured && supabase) {
       setLoading(true);
       try {
-        // Fetch ALL appointments for this patient phone
+        // Fetch ALL appointments matching patient phone OR booking_code OR id
         const { data, error } = await supabase
           .from('appointments')
           .select(`
@@ -97,7 +90,7 @@ export default function AppointmentTracker({ appointments, doctors = [] }: Appoi
               )
             )
           `)
-          .eq('patient_phone', phoneQuery);
+          .or(`patient_phone.eq.${phoneQuery},booking_code.eq.${phoneQuery},id.eq.${phoneQuery}`);
 
         if (error) throw error;
 
