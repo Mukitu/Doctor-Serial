@@ -63,6 +63,8 @@ export interface Doctor {
   priorityIndex: number;
   isActive?: boolean;
   specialtyId?: string;
+  specialtyIds?: string[];
+  specialties?: string[];
   specialtyNameBn?: string;
   specialtyNameEn?: string;
   chamberId?: string;

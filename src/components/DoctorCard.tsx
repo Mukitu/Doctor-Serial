@@ -87,11 +87,16 @@ export default function DoctorCard({
             </div>
 
             <div>
-              {/* Specialty Badge & Rating */}
-              <div className="flex items-center gap-2">
-                <span className="inline-flex rounded-md bg-slate-100 px-2 py-0.5 text-[9px] font-bold text-slate-600 border border-slate-200/50">
-                  {doctor.specialtyNameBn || doctor.specialty || 'মেডিসিন'}
-                </span>
+              {/* Specialty Badges & Rating */}
+              <div className="flex flex-wrap items-center gap-1.5">
+                {(doctor.specialties && doctor.specialties.length > 0
+                  ? doctor.specialties
+                  : (doctor.specialtyNameBn || doctor.specialty || 'মেডিসিন').split(/[,/]/).map(s => s.trim())
+                ).map((specName, sIdx) => (
+                  <span key={sIdx} className="inline-flex rounded-md bg-sky-50 px-2 py-0.5 text-[9px] font-extrabold text-[#0284C7] border border-sky-100">
+                    {specName}
+                  </span>
+                ))}
                 <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold text-amber-800 border border-amber-200/60">
                   <Star className="h-3 w-3 fill-amber-400 text-amber-500" />
                   <span>{(doctor.rating || 5.0).toFixed(1)}</span>

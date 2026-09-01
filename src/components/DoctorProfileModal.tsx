@@ -204,10 +204,15 @@ export default function DoctorProfileModal({
               </div>
 
               <div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="inline-flex rounded-md bg-[#0284C7]/10 px-2 py-0.5 text-[10px] font-bold text-[#0284C7] border border-[#0284C7]/20">
-                    {doctor.specialtyNameBn || doctor.specialty || 'মেডিসিন'}
-                  </span>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {(doctor.specialties && doctor.specialties.length > 0
+                    ? doctor.specialties
+                    : (doctor.specialtyNameBn || doctor.specialty || 'মেডিসিন').split(/[,/]/).map(s => s.trim())
+                  ).map((specName, sIdx) => (
+                    <span key={sIdx} className="inline-flex rounded-md bg-[#0284C7]/10 px-2 py-0.5 text-[10px] font-extrabold text-[#0284C7] border border-[#0284C7]/20">
+                      {specName}
+                    </span>
+                  ))}
                   <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700 border border-emerald-200/50">
                     <ShieldCheck className="h-3 w-3" />
                     <span>BM&DC: {doctor.bmdc || 'ভেরিফাইড'}</span>

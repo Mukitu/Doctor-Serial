@@ -43,6 +43,7 @@ export default function DoctorFormModal({
   const [name, setName] = useState('');
   const [bmdc, setBmdc] = useState('');
   const [specialtyId, setSpecialtyId] = useState('');
+  const [selectedSpecialtyIds, setSelectedSpecialtyIds] = useState<string[]>([]);
   const [degrees, setDegrees] = useState('');
   const [designation, setDesignation] = useState('');
   const [workplace, setWorkplace] = useState('');
@@ -81,7 +82,30 @@ export default function DoctorFormModal({
     if (doctor) {
       setName(doctor.name || '');
       setBmdc(doctor.bmdc || '');
-      setSpecialtyId(doctor.specialtyId || specialties[0]?.id || '');
+      
+      // Multi-specialty initialization
+      let initialSpecIds: string[] = [];
+      if (Array.isArray(doctor.specialtyIds) && doctor.specialtyIds.length > 0) {
+        initialSpecIds = doctor.specialtyIds;
+      } else if (Array.isArray(doctor.specialties) && doctor.specialties.length > 0) {
+        initialSpecIds = specialties.filter(s => doctor.specialties?.includes(s.nameBn) || doctor.specialties?.includes(s.id)).map(s => s.id);
+      } else if (doctor.specialtyId) {
+        initialSpecIds = [doctor.specialtyId];
+      } else if (doctor.specialty) {
+        const rawNames = doctor.specialty.split(/[,/&]/).map(s => s.trim().toLowerCase());
+        const matched = specialties.filter(s => 
+          rawNames.includes(s.nameBn.toLowerCase()) || 
+          rawNames.includes(s.nameEn.toLowerCase()) ||
+          (doctor.specialtyNameBn && s.nameBn === doctor.specialtyNameBn)
+        ).map(s => s.id);
+        if (matched.length > 0) initialSpecIds = matched;
+      }
+      if (initialSpecIds.length === 0 && specialties.length > 0) {
+        initialSpecIds = [specialties[0].id];
+      }
+      setSelectedSpecialtyIds(initialSpecIds);
+      setSpecialtyId(initialSpecIds[0] || specialties[0]?.id || '');
+
       setDegrees(doctor.degrees || '');
       setDesignation(doctor.designation || '');
       setWorkplace(doctor.workplace || '');
@@ -168,6 +192,7 @@ export default function DoctorFormModal({
       setName('');
       setBmdc('');
       setSpecialtyId(specialties[0]?.id || '');
+      setSelectedSpecialtyIds(specialties[0]?.id ? [specialties[0].id] : []);
       setDegrees('');
       setDesignation('');
       setWorkplace('');
@@ -550,7 +575,12 @@ export default function DoctorFormModal({
       }
     }
 
-    const matchedSpecialty = specialties.find(s => s.id === specialtyId);
+    const selectedSpecs = specialties.filter(s => selectedSpecialtyIds.includes(s.id));
+    const primarySpec = selectedSpecs[0] || specialties[0];
+    const specNamesBn = selectedSpecs.map(s => s.nameBn);
+    const specNamesEn = selectedSpecs.map(s => s.nameEn).filter(Boolean);
+    const combinedSpecialtyStr = specNamesBn.length > 0 ? specNamesBn.join(', ') : (primarySpec?.nameBn || 'মেডিসিন');
+    const primarySpecId = primarySpec?.id || specialtyId || '';
     const primaryChamber = processedChambers[0] || {};
 
     const doctorPayload = {
@@ -559,11 +589,14 @@ export default function DoctorFormModal({
       name: name.trim(),
       bmdc: bmdc.trim(),
       bmdc_number: bmdc.trim(),
-      specialtyId: specialtyId,
-      specialty_id: specialtyId,
-      specialty: matchedSpecialty?.nameBn || doctor?.specialty || 'মেডিসিন',
-      specialtyNameBn: matchedSpecialty?.nameBn || doctor?.specialty || 'মেডিসিন',
-      specialtyNameEn: matchedSpecialty?.nameEn || '',
+      specialtyId: primarySpecId,
+      specialty_id: primarySpecId,
+      specialtyIds: selectedSpecialtyIds,
+      specialty_ids: selectedSpecialtyIds,
+      specialties: specNamesBn,
+      specialty: combinedSpecialtyStr,
+      specialtyNameBn: combinedSpecialtyStr,
+      specialtyNameEn: specNamesEn.join(', '),
       degrees: degrees.trim(),
       designation: designation.trim(),
       workplace: workplace.trim(),
@@ -682,20 +715,81 @@ export default function DoctorFormModal({
                   />
                 </div>
 
-                {/* Specialty */}
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-[11px] font-bold text-slate-500">বিশেষজ্ঞতা / ক্যাটাগরি *</label>
-                  <select
-                    value={specialtyId}
-                    onChange={(e) => setSpecialtyId(e.target.value)}
-                    className="w-full rounded-lg border border-slate-200 py-2 px-2.5 text-xs font-bold text-slate-800 outline-none focus:border-[#0284C7] cursor-pointer"
-                  >
-                    {specialties.map((spec) => (
-                      <option key={spec.id} value={spec.id}>
-                        {spec.nameBn} ({spec.nameEn})
-                      </option>
-                    ))}
-                  </select>
+                {/* Specialty / Multiple Categories */}
+                <div className="flex flex-col gap-2 col-span-1 sm:col-span-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[11px] font-bold text-slate-600 flex items-center gap-1.5">
+                      <span>বিশেষজ্ঞতা / ক্যাটাগরি সমূহ *</span>
+                      <span className="text-[#0284C7] font-extrabold text-[10px] bg-sky-50 px-2 py-0.5 rounded-md border border-sky-200/80">
+                        (একাধিক সিলেক্ট করতে পারবেন)
+                      </span>
+                    </label>
+                    <span className="text-[10px] font-extrabold text-[#0284C7]">
+                      {selectedSpecialtyIds.length} টি ক্যাটাগরি সিলেক্টেড
+                    </span>
+                  </div>
+
+                  {/* Selected Specialty Badges */}
+                  <div className="flex flex-wrap gap-1.5 p-2 bg-slate-50 border border-slate-200 rounded-xl min-h-[42px] items-center">
+                    {selectedSpecialtyIds.length === 0 ? (
+                      <span className="text-xs text-slate-400 font-bold px-1">নিচের তালিকা থেকে ক্যাটাগরি সিলেক্ট করুন</span>
+                    ) : (
+                      selectedSpecialtyIds.map(id => {
+                        const spec = specialties.find(s => s.id === id);
+                        if (!spec) return null;
+                        return (
+                          <span
+                            key={id}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-extrabold bg-[#0284C7] text-white shadow-xs animate-in zoom-in-95 duration-150"
+                          >
+                            <span>{spec.nameBn}</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (selectedSpecialtyIds.length > 1) {
+                                  setSelectedSpecialtyIds(prev => prev.filter(x => x !== id));
+                                }
+                              }}
+                              title="ক্যাটাগরি সরাও"
+                              className="hover:bg-sky-700 rounded-full p-0.5 transition cursor-pointer"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </span>
+                        );
+                      })
+                    )}
+                  </div>
+
+                  {/* Multi-Select Category Pills Grid */}
+                  <div className="border border-slate-200 rounded-xl p-2 bg-white max-h-[140px] overflow-y-auto grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                    {specialties.map(spec => {
+                      const isSelected = selectedSpecialtyIds.includes(spec.id);
+                      return (
+                        <button
+                          key={spec.id}
+                          type="button"
+                          onClick={() => {
+                            if (isSelected) {
+                              if (selectedSpecialtyIds.length > 1) {
+                                setSelectedSpecialtyIds(prev => prev.filter(x => x !== spec.id));
+                              }
+                            } else {
+                              setSelectedSpecialtyIds(prev => [...prev, spec.id]);
+                            }
+                          }}
+                          className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-bold border transition text-left cursor-pointer ${
+                            isSelected
+                              ? 'border-[#0284C7] bg-sky-50 text-[#0284C7] shadow-xs'
+                              : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                          }`}
+                        >
+                          <span className="truncate">{spec.nameBn}</span>
+                          {isSelected && <Check className="h-3.5 w-3.5 shrink-0 text-[#0284C7]" />}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
 
                 {/* Degrees */}

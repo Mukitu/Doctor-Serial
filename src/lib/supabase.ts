@@ -660,6 +660,40 @@ export async function getDoctors(): Promise<Doctor[]> {
       const spec = specMap.get(doc.specialty_id);
       const docChambers = chamberMap.get(doc.id) || [];
       
+      let parsedSpecialtyIds: string[] = [];
+      let parsedSpecialties: string[] = [];
+
+      if (Array.isArray(doc.specialty_ids) && doc.specialty_ids.length > 0) {
+        parsedSpecialtyIds = doc.specialty_ids;
+      } else if (typeof doc.specialty_ids === 'string' && doc.specialty_ids.trim()) {
+        try { parsedSpecialtyIds = JSON.parse(doc.specialty_ids); } catch {
+          parsedSpecialtyIds = doc.specialty_ids.split(',').map((s: string) => s.trim());
+        }
+      }
+
+      if (Array.isArray(doc.specialties) && doc.specialties.length > 0) {
+        parsedSpecialties = doc.specialties;
+      } else if (typeof doc.specialties === 'string' && doc.specialties.trim()) {
+        try { parsedSpecialties = JSON.parse(doc.specialties); } catch {
+          parsedSpecialties = doc.specialties.split(',').map((s: string) => s.trim());
+        }
+      }
+
+      if (parsedSpecialtyIds.length === 0 && doc.specialty_id) {
+        parsedSpecialtyIds = [doc.specialty_id];
+      }
+
+      if (parsedSpecialties.length === 0) {
+        if (parsedSpecialtyIds.length > 0) {
+          parsedSpecialties = parsedSpecialtyIds.map(id => specMap.get(id)?.name_bn).filter(Boolean) as string[];
+        }
+        if (parsedSpecialties.length === 0 && spec?.name_bn) {
+          parsedSpecialties = [spec.name_bn];
+        }
+      }
+
+      const combinedSpecialtyText = parsedSpecialties.length > 0 ? parsedSpecialties.join(', ') : (spec?.name_bn || 'মেডিসিন');
+
       const fullChambersList = docChambers.map((dc: any) => {
         const fac = facilityMap.get(dc.facility_id);
         const facName = fac?.name || dc.facility_name || dc.facilityName || dc.facility || dc.facilities?.name || '';
@@ -686,10 +720,12 @@ export async function getDoctors(): Promise<Doctor[]> {
         mappedList.push({
           id: doc.id,
           doctorId: doc.id,
-          specialtyId: doc.specialty_id,
-          specialtyNameBn: spec?.name_bn || '',
+          specialtyId: doc.specialty_id || parsedSpecialtyIds[0] || '',
+          specialtyIds: parsedSpecialtyIds,
+          specialties: parsedSpecialties,
+          specialtyNameBn: combinedSpecialtyText,
           specialtyNameEn: spec?.name_en || '',
-          specialty: spec?.name_bn || 'মেডিসিন',
+          specialty: combinedSpecialtyText,
           facility: 'চেম্বার তথ্য যুক্ত করা হয়নি',
           chamberAddress: '',
           name: doc.name,
@@ -723,10 +759,12 @@ export async function getDoctors(): Promise<Doctor[]> {
         mappedList.push({
           id: doc.id,
           doctorId: doc.id,
-          specialtyId: doc.specialty_id,
-          specialtyNameBn: spec?.name_bn || '',
+          specialtyId: doc.specialty_id || parsedSpecialtyIds[0] || '',
+          specialtyIds: parsedSpecialtyIds,
+          specialties: parsedSpecialties,
+          specialtyNameBn: combinedSpecialtyText,
           specialtyNameEn: spec?.name_en || '',
-          specialty: spec?.name_bn || 'মেডিসিন',
+          specialty: combinedSpecialtyText,
           facility: primaryChamber?.facilityName || '',
           chamberAddress: primaryChamber?.facilityAddress || '',
           name: doc.name,
@@ -989,8 +1027,9 @@ export async function deleteDoctor(id: string): Promise<void> {
       nameMatches?.forEach(m => m.id && targetDocIds.add(m.id));
     }
 
-    // 3. For ALL resolved doctor UUIDs, execute full cascade deletion
+    // 3. For ALL resolved doctor UUIDs & direct query attributes, execute full cascade deletion
     for (const docId of Array.from(targetDocIds)) {
+      if (!docId) continue;
       await supabase.from('chambers').delete().eq('doctor_id', docId);
       await supabase.from('appointments').delete().eq('doctor_id', docId);
       await supabase.from('reviews').delete().eq('doctor_id', docId);
@@ -1000,6 +1039,20 @@ export async function deleteDoctor(id: string): Promise<void> {
       } else {
         console.log(`[Supabase Delete Doctor Success]: Deleted doctor ${docId}`);
       }
+    }
+
+    // Direct fallbacks by BMDC, Name, or Raw ID
+    if (targetDoc?.bmdc) {
+      await supabase.from('doctors').delete().eq('bmdc_number', targetDoc.bmdc);
+    }
+    if (targetDoc?.name) {
+      await supabase.from('doctors').delete().eq('name', targetDoc.name);
+    }
+    if (id) {
+      await supabase.from('doctors').delete().eq('id', id);
+    }
+    if (rawId && rawId !== id) {
+      await supabase.from('doctors').delete().eq('id', rawId);
     }
   } catch (err) {
     console.error('Error deleting doctor from Supabase:', err);
@@ -1288,6 +1341,13 @@ export async function upsertDoctorWithChambers(
       docPayload.about = doctor.about;
     }
 
+    if (Array.isArray(doctor.specialtyIds) || Array.isArray(doctor.specialty_ids)) {
+      docPayload.specialty_ids = doctor.specialtyIds || doctor.specialty_ids;
+    }
+    if (Array.isArray(doctor.specialties)) {
+      docPayload.specialties = doctor.specialties;
+    }
+
     // Upsert Doctor profile
     let didUpdate = false;
     if (!isNew && targetDocId) {
@@ -1298,8 +1358,12 @@ export async function upsertDoctorWithChambers(
         .select('id');
 
       if (updateErr) {
-        if (updateErr.message?.includes('about') || updateErr.message?.includes('column')) {
-          delete docPayload.about;
+        if (updateErr.message?.includes('specialty_ids') || updateErr.message?.includes('specialties') || updateErr.message?.includes('column')) {
+          delete docPayload.specialty_ids;
+          delete docPayload.specialties;
+          if (updateErr.message?.includes('about')) {
+            delete docPayload.about;
+          }
           const { data: retryData, error: retryUpdateErr } = await supabase
             .from('doctors')
             .update(docPayload)
@@ -1335,8 +1399,12 @@ export async function upsertDoctorWithChambers(
         .insert(insertPayload);
 
       if (insertErr) {
-        if (insertErr.message?.includes('about') || insertErr.message?.includes('column')) {
-          delete insertPayload.about;
+        if (insertErr.message?.includes('specialty_ids') || insertErr.message?.includes('specialties') || insertErr.message?.includes('column')) {
+          delete insertPayload.specialty_ids;
+          delete insertPayload.specialties;
+          if (insertErr.message?.includes('about')) {
+            delete insertPayload.about;
+          }
           const { error: retryInsertErr } = await supabase
             .from('doctors')
             .insert(insertPayload);

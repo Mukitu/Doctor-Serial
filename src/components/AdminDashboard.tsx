@@ -1033,9 +1033,16 @@ export default function AdminDashboard({
 
                         {/* Specialty & BMDC */}
                         <td className="p-3">
-                          <span className="inline-flex rounded-md bg-sky-50 px-2 py-0.5 text-[10px] font-bold text-[#0284C7] border border-sky-100">
-                            {doc.specialty}
-                          </span>
+                          <div className="flex flex-wrap gap-1 max-w-[180px]">
+                            {(doc.specialties && doc.specialties.length > 0
+                              ? doc.specialties
+                              : (doc.specialty || 'মেডিসিন').split(/[,/]/).map(s => s.trim())
+                            ).map((specName, sIdx) => (
+                              <span key={sIdx} className="inline-flex rounded-md bg-sky-50 px-2 py-0.5 text-[10px] font-bold text-[#0284C7] border border-sky-100">
+                                {specName}
+                              </span>
+                            ))}
+                          </div>
                           <p className="text-[10px] text-slate-400 font-mono mt-1">BMDC: {doc.bmdc || 'N/A'}</p>
                         </td>
 
